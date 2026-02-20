@@ -1,0 +1,21 @@
+{
+  "name": "HydroWatch — Global Microplastics Monitor",
+  "short_name": "HydroWatch",
+  "description": "Community-powered global microplastics water monitoring app",
+  "start_url": "/Yay-HydroWatch/",
+  "scope": "/Yay-HydroWatch/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#020b14",
+  "theme_color": "#020b14",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["education", "science", "environment"],
+  "lang": "en"
+}
