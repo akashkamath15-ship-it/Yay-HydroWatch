@@ -1,0 +1,2580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HydroWatch — Global Microplastics Monitor</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#020b14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="HydroWatch">
+<meta name="description" content="Community-powered global microplastics water monitoring app">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Clash+Display:wght@400;500;600;700&family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #020b14;
+  --surface: #071624;
+  --surface2: #0d2136;
+  --border: rgba(0,200,255,0.12);
+  --border2: rgba(0,200,255,0.25);
+  --cyan: #00d4ff;
+  --green: #00ff88;
+  --amber: #ffaa00;
+  --red: #ff3d5a;
+  --purple: #a855f7;
+  --text: #d4e8f5;
+  --muted: #4a7090;
+  --muted2: #2a4a65;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Manrope', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Animated background */
+.bg-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.bg-canvas::before {
+  content: '';
+  position: absolute;
+  width: 800px; height: 800px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0,100,180,0.08) 0%, transparent 70%);
+  top: -200px; left: -200px;
+  animation: pulse1 8s ease-in-out infinite;
+}
+
+.bg-canvas::after {
+  content: '';
+  position: absolute;
+  width: 600px; height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0,200,100,0.05) 0%, transparent 70%);
+  bottom: -100px; right: -100px;
+  animation: pulse2 10s ease-in-out infinite;
+}
+
+@keyframes pulse1 { 0%,100%{transform:scale(1) translate(0,0)} 50%{transform:scale(1.2) translate(40px,40px)} }
+@keyframes pulse2 { 0%,100%{transform:scale(1) translate(0,0)} 50%{transform:scale(1.3) translate(-30px,-30px)} }
+
+/* Grid lines */
+.grid-overlay {
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,200,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,200,255,0.025) 1px, transparent 1px);
+  background-size: 60px 60px;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* HEADER */
+header {
+  position: relative;
+  z-index: 10;
+  padding: 0 40px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  background: rgba(2,11,20,0.8);
+  backdrop-filter: blur(20px);
+  position: sticky;
+  top: 0;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-mark {
+  width: 32px; height: 32px;
+  border: 2px solid var(--cyan);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.logo-mark::after {
+  content: '';
+  width: 10px; height: 10px;
+  background: var(--cyan);
+  border-radius: 50%;
+  animation: logoBlip 2s ease-in-out infinite;
+}
+
+@keyframes logoBlip { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
+
+.logo-text {
+  font-family: 'Clash Display', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.5px;
+}
+
+.logo-text span { color: var(--cyan); }
+
+nav {
+  display: flex;
+  gap: 4px;
+}
+
+.nav-btn {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  padding: 7px 16px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.2s;
+  text-transform: uppercase;
+}
+
+.nav-btn:hover { color: var(--text); border-color: var(--border2); }
+.nav-btn.active { color: var(--cyan); border-color: var(--cyan); background: rgba(0,212,255,0.06); }
+
+.live-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--green);
+  letter-spacing: 1px;
+}
+
+.live-dot {
+  width: 6px; height: 6px;
+  background: var(--green);
+  border-radius: 50%;
+  animation: blink 1.5s step-start infinite;
+}
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+/* MAIN */
+main {
+  position: relative;
+  z-index: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 48px 32px 80px;
+}
+
+.panel { display: none; }
+.panel.active { display: block; animation: fadeIn 0.4s ease; }
+
+@keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+/* HERO */
+.hero {
+  text-align: center;
+  padding: 60px 0 56px;
+  animation: fadeIn 0.8s ease;
+}
+
+.hero-eyebrow {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 4px;
+  color: var(--cyan);
+  text-transform: uppercase;
+  margin-bottom: 20px;
+  opacity: 0.8;
+}
+
+.hero h1 {
+  font-family: 'Clash Display', sans-serif;
+  font-size: clamp(38px, 6vw, 72px);
+  font-weight: 700;
+  line-height: 1.0;
+  letter-spacing: -2px;
+  color: #fff;
+  margin-bottom: 8px;
+}
+
+.hero h1 em {
+  font-style: normal;
+  background: linear-gradient(90deg, var(--cyan), var(--green));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero-sub {
+  font-size: 16px;
+  color: var(--muted);
+  max-width: 520px;
+  margin: 20px auto 40px;
+  line-height: 1.7;
+  font-weight: 400;
+}
+
+.hero-stats {
+  display: flex;
+  justify-content: center;
+  gap: 48px;
+  margin-bottom: 48px;
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-num {
+  font-family: 'Clash Display', sans-serif;
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--cyan);
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.btn-primary {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 1px;
+  padding: 14px 32px;
+  background: var(--cyan);
+  color: var(--bg);
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-weight: 500;
+  text-transform: uppercase;
+  transition: all 0.2s;
+}
+
+.btn-primary:hover { background: #fff; transform: translateY(-1px); }
+
+.btn-ghost {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 1px;
+  padding: 14px 32px;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border2);
+  border-radius: 3px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.2s;
+}
+
+.btn-ghost:hover { border-color: var(--cyan); color: var(--cyan); }
+
+/* ALERT BANNER */
+.alert-strip {
+  background: linear-gradient(90deg, rgba(255,170,0,0.08), rgba(255,60,90,0.08));
+  border: 1px solid rgba(255,170,0,0.2);
+  border-radius: 4px;
+  padding: 16px 24px;
+  margin-bottom: 48px;
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.alert-icon { font-size: 20px; flex-shrink: 0; margin-top: 2px; }
+
+.alert-text h4 {
+  font-family: 'Clash Display', sans-serif;
+  font-size: 14px;
+  color: var(--amber);
+  margin-bottom: 4px;
+}
+
+.alert-text p { font-size: 12px; color: var(--muted); line-height: 1.7; }
+
+/* SECTION LABELS */
+.section-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: var(--cyan);
+  text-transform: uppercase;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* MAP SECTION */
+.map-container {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 32px;
+}
+
+.map-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.map-header h3 {
+  font-family: 'Clash Display', sans-serif;
+  font-size: 16px;
+  color: #fff;
+}
+
+.map-legend {
+  display: flex;
+  gap: 16px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.legend-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+}
+
+/* SVG Map */
+#mapSvg {
+  width: 100%;
+  height: 420px;
+  display: block;
+  background: #07111f;
+}
+
+.map-pin {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.map-pin:hover { transform: scale(1.4); }
+
+.pin-tooltip {
+  position: absolute;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  padding: 10px 14px;
+  font-size: 12px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+  z-index: 100;
+  min-width: 160px;
+}
+
+.pin-tooltip.visible { opacity: 1; }
+
+/* LEADERBOARD */
+.leaderboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+@media(max-width: 700px) { .leaderboard-grid { grid-template-columns: 1fr; } }
+
+.lb-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.lb-card-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lb-card-header h4 {
+  font-family: 'Clash Display', sans-serif;
+  font-size: 14px;
+  color: #fff;
+}
+
+.lb-icon { font-size: 18px; }
+
+.lb-list { padding: 8px 0; }
+
+.lb-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  border-bottom: 1px solid rgba(0,200,255,0.05);
+  transition: background 0.15s;
+}
+
+.lb-row:last-child { border-bottom: none; }
+.lb-row:hover { background: rgba(0,212,255,0.04); }
+
+.lb-rank {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--muted);
+  width: 20px;
+  flex-shrink: 0;
+}
+
+.lb-rank.gold { color: #ffd700; }
+.lb-rank.silver { color: #c0c0c0; }
+.lb-rank.bronze { color: #cd7f32; }
+
+.lb-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.lb-value {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+}
+
+.lb-bar-wrap {
+  width: 60px;
+  height: 4px;
+  background: var(--muted2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.lb-bar { height: 100%; border-radius: 2px; }
+
+/* CHARTS */
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+@media(max-width: 700px) { .charts-grid { grid-template-columns: 1fr; } }
+
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 24px;
+}
+
+.chart-card h4 {
+  font-family: 'Clash Display', sans-serif;
+  font-size: 14px;
+  color: #fff;
+  margin-bottom: 20px;
+}
+
+.bar-chart { display: flex; flex-direction: column; gap: 10px; }
+
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bar-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  width: 90px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.bar-track {
+  flex: 1;
+  height: 8px;
+  background: var(--muted2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 1s ease;
+}
+
+.bar-val {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--muted);
+  width: 36px;
+  text-align: right;
+}
+
+/* Donut chart */
+.donut-wrap {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.donut-legend { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+
+.donut-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.donut-swatch {
+  width: 10px; height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* SUBMIT FORM */
+.form-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+@media(max-width: 700px) { .form-layout { grid-template-columns: 1fr; } }
+
+.form-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 28px;
+}
+
+.form-card h3 {
+  font-family: 'Clash Display', sans-serif;
+  font-size: 18px;
+  color: #fff;
+  margin-bottom: 6px;
+}
+
+.form-card .form-desc {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 24px;
+  line-height: 1.7;
+}
+
+.field { margin-bottom: 18px; }
+
+.field label {
+  display: block;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--cyan);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.field input, .field select, .field textarea {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text);
+  font-family: 'Manrope', sans-serif;
+  font-size: 13px;
+  padding: 10px 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.field input:focus, .field select:focus, .field textarea:focus {
+  border-color: var(--cyan);
+}
+
+.field select option { background: var(--surface2); }
+
+.field textarea { resize: vertical; min-height: 80px; }
+
+.source-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.source-btn {
+  padding: 10px 6px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--muted);
+  cursor: pointer;
+  text-align: center;
+  font-size: 11px;
+  font-family: 'DM Mono', monospace;
+  transition: all 0.2s;
+  letter-spacing: 0.5px;
+}
+
+.source-btn .src-icon { display: block; font-size: 20px; margin-bottom: 4px; }
+.source-btn:hover { border-color: var(--border2); color: var(--text); }
+.source-btn.selected { border-color: var(--cyan); color: var(--cyan); background: rgba(0,212,255,0.06); }
+
+.safety-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.safety-btn {
+  flex: 1;
+  padding: 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: 'DM Mono', monospace;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.safety-btn.s1.selected { border-color: var(--green); color: var(--green); background: rgba(0,255,136,0.06); }
+.safety-btn.s2.selected { border-color: #00aaff; color: #00aaff; background: rgba(0,170,255,0.06); }
+.safety-btn.s3.selected { border-color: var(--amber); color: var(--amber); background: rgba(255,170,0,0.06); }
+.safety-btn.s4.selected { border-color: #ff7a00; color: #ff7a00; background: rgba(255,122,0,0.06); }
+.safety-btn.s5.selected { border-color: var(--red); color: var(--red); background: rgba(255,61,90,0.06); }
+
+.submit-result {
+  display: none;
+  background: rgba(0,255,136,0.06);
+  border: 1px solid rgba(0,255,136,0.2);
+  border-radius: 4px;
+  padding: 20px 24px;
+  text-align: center;
+  margin-top: 20px;
+}
+
+.submit-result h4 {
+  font-family: 'Clash Display', sans-serif;
+  font-size: 18px;
+  color: var(--green);
+  margin-bottom: 6px;
+}
+
+.submit-result p { font-size: 12px; color: var(--muted); }
+
+/* AWARENESS */
+.awareness-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+@media(max-width: 700px) { .awareness-grid { grid-template-columns: 1fr; } }
+
+.awareness-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+}
+
+.awareness-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+}
+
+.awareness-card.danger::before { background: var(--red); }
+.awareness-card.warning::before { background: var(--amber); }
+.awareness-card.info::before { background: var(--cyan); }
+
+.awareness-card .ac-icon { font-size: 32px; margin-bottom: 12px; }
+
+.awareness-card h4 {
+  font-family: 'Clash Display', sans-serif;
+  font-size: 15px;
+  color: #fff;
+  margin-bottom: 8px;
+}
+
+.awareness-card p { font-size: 12px; color: var(--muted); line-height: 1.8; }
+
+.fact-ticker {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 20px 24px;
+  margin-bottom: 32px;
+  overflow: hidden;
+  position: relative;
+}
+
+.fact-ticker h4 {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: var(--amber);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.ticker-text {
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.6;
+  animation: fadeIn 0.5s ease;
+}
+
+.ticker-text strong { color: var(--cyan); }
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 32px;
+  right: 32px;
+  background: var(--surface2);
+  border: 1px solid var(--green);
+  border-radius: 4px;
+  padding: 14px 20px;
+  font-size: 13px;
+  color: var(--green);
+  z-index: 1000;
+  transform: translateY(80px);
+  opacity: 0;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  font-family: 'DM Mono', monospace;
+}
+
+.toast.show { transform: translateY(0); opacity: 1; }
+
+/* Recent submissions feed */
+.feed {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.feed-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.feed-header h4 {
+  font-family: 'Clash Display', sans-serif;
+  font-size: 14px;
+  color: #fff;
+}
+
+.feed-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(0,200,255,0.05);
+  animation: slideIn 0.4s ease;
+}
+
+@keyframes slideIn { from{opacity:0;transform:translateX(-10px)} to{opacity:1;transform:translateX(0)} }
+
+.feed-item:last-child { border-bottom: none; }
+
+.feed-icon { font-size: 20px; }
+
+.feed-info { flex: 1; }
+
+.feed-info .location { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+.feed-info .detail { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); letter-spacing: 0.5px; }
+
+.feed-badge {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 2px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.badge-safe { background: rgba(0,255,136,0.1); color: var(--green); border: 1px solid rgba(0,255,136,0.2); }
+.badge-mod { background: rgba(255,170,0,0.1); color: var(--amber); border: 1px solid rgba(255,170,0,0.2); }
+.badge-unsafe { background: rgba(255,61,90,0.1); color: var(--red); border: 1px solid rgba(255,61,90,0.2); }
+
+.time-ago { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); white-space: nowrap; }
+
+</style>
+</head>
+<body>
+
+<div class="bg-canvas"></div>
+<div class="grid-overlay"></div>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark"></div>
+    <span class="logo-text">Hydro<span>Watch</span></span>
+  </div>
+  <nav>
+    <button class="nav-btn active" onclick="showPanel('dashboard', this)">Dashboard</button>
+    <button class="nav-btn" onclick="showPanel('map', this)">Map</button>
+    <button class="nav-btn" onclick="showPanel('submit', this)">Submit Data</button>
+    <button class="nav-btn" onclick="showPanel('review', this)">🔍 Review</button>
+    <button class="nav-btn" onclick="showPanel('awareness', this)">Learn</button>
+    <button class="nav-btn" onclick="showPanel('transparency', this)">💚 Transparency</button>
+  </nav>
+  <div class="live-badge">
+    <div class="live-dot"></div>
+    LIVE DATA
+  </div>
+</header>
+
+<main>
+
+<!-- DASHBOARD -->
+<div class="panel active" id="panel-dashboard">
+
+  <div class="hero">
+    <div class="hero-eyebrow">Global Microplastics Monitor</div>
+    <h1>Our Water<br>Is Under <em>Threat</em></h1>
+    <p class="hero-sub">Community-powered research tracking microplastic contamination in water sources worldwide. No fake data — every result here is real. Be the first to submit yours.</p>
+
+    <div class="hero-stats">
+      <div class="stat-item">
+        <div class="stat-num" id="statSubmissions">0</div>
+        <div class="stat-label">Submissions</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num" id="statLocations">0</div>
+        <div class="stat-label">Locations</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num" id="statParticles">0</div>
+        <div class="stat-label">Particles Logged</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num" id="statCountries">0</div>
+        <div class="stat-label">Countries</div>
+      </div>
+    </div>
+
+    <div class="hero-actions">
+      <button class="btn-primary" onclick="showPanel('submit', document.querySelector('.nav-btn:nth-child(3)'))">Submit Your Results</button>
+      <button class="btn-ghost" onclick="showPanel('map', document.querySelector('.nav-btn:nth-child(2)'))">Explore the Map</button>
+    </div>
+  </div>
+
+  <div class="alert-strip">
+    <div class="alert-icon">⚠️</div>
+    <div class="alert-text">
+      <h4>Community Finding: River Water Shows Highest Contamination</h4>
+      <p>Based on community submissions so far, river and lake water samples contain on average 3.4× more microplastic particles than filtered tap water. Bottled water results remain surprisingly high — averaging 18 particles per 90mL sample. Add your data to help build a clearer picture.</p>
+    </div>
+  </div>
+
+  <div class="section-label">Contamination by Water Source</div>
+  <div class="charts-grid">
+    <div class="chart-card">
+      <h4>Avg. Particles per 90mL Sample</h4>
+      <div class="bar-chart" id="sourceBarChart"></div>
+    </div>
+    <div class="chart-card">
+      <h4>Particle Type Distribution</h4>
+      <div class="donut-wrap">
+        <svg width="120" height="120" viewBox="0 0 120 120" id="donutSvg"></svg>
+        <div class="donut-legend" id="donutLegend"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Community Leaderboard</div>
+  <div class="leaderboard-grid">
+    <div class="lb-card">
+      <div class="lb-card-header">
+        <span class="lb-icon">🌍</span>
+        <h4>Most Contaminated (Highest Risk)</h4>
+      </div>
+      <div class="lb-list" id="mostContaminated"></div>
+    </div>
+    <div class="lb-card">
+      <div class="lb-card-header">
+        <span class="lb-icon">💧</span>
+        <h4>Cleanest Sources Reported</h4>
+      </div>
+      <div class="lb-list" id="cleanestSources"></div>
+    </div>
+  </div>
+
+  <div class="section-label">Water Treatment Performance</div>
+  <div class="lb-card" style="margin-bottom:32px">
+    <div class="lb-card-header" style="background:linear-gradient(90deg,rgba(0,255,136,0.06),transparent);border-bottom:1px solid rgba(0,255,136,0.15)">
+      <span class="lb-icon">⚡</span>
+      <h4 style="color:#fff">Fastest Cleaning Rate by City</h4>
+      <span style="margin-left:auto;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px">RAW → FILTERED REDUCTION</span>
+    </div>
+    <div style="padding:12px 20px 4px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:0.5px;line-height:1.7">
+      Cities ranked by how effectively their filtration reduces microplastic particle count. Calculated from paired raw vs. filtered submissions from the same location.
+    </div>
+    <div class="lb-list" id="cleaningRate"></div>
+    <div style="padding:12px 20px;border-top:1px solid var(--border);font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">
+      🔬 Submit both a <strong style="color:var(--text)">raw source</strong> and a <strong style="color:var(--text)">filtered</strong> reading from your city to appear on this chart.
+    </div>
+  </div>
+
+  <div class="section-label">Recent Submissions</div>
+  <div class="feed">
+    <div class="feed-header">
+      <h4>Live Feed</h4>
+      <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">UPDATING LIVE</span>
+    </div>
+    <div id="feedList"></div>
+  </div>
+
+</div>
+
+<!-- MAP -->
+<div class="panel" id="panel-map">
+  <div style="margin-bottom:32px">
+    <div class="section-label">Global Contamination Map</div>
+  </div>
+
+  <div class="map-container">
+    <div class="map-header">
+      <h3>Microplastic Hotspots</h3>
+      <div class="map-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>Minimal</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#00aaff"></div>Low</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--amber)"></div>Moderate</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ff7a00"></div>Elevated</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>Critical</div>
+      </div>
+    </div>
+    <svg id="mapSvg" viewBox="0 0 960 480"></svg>
+    <div class="pin-tooltip" id="pinTooltip"></div>
+  </div>
+
+  <div class="section-label">Regional Breakdown</div>
+  <div class="chart-card" style="margin-bottom:24px">
+    <h4>Contamination by Region</h4>
+    <div class="bar-chart" id="regionChart"></div>
+  </div>
+</div>
+
+<!-- SUBMIT -->
+<div class="panel" id="panel-submit">
+  <div style="margin-bottom:32px">
+    <div class="section-label">Submit Your Test Results</div>
+  </div>
+
+  <div class="form-layout">
+    <div class="form-card">
+      <h3>Your Experiment Data</h3>
+      <p class="form-desc">Share what you found. Every submission helps build a clearer picture of global water contamination.</p>
+
+      <div class="field">
+        <label>Location (City, Country)</label>
+        <input type="text" id="f-location" placeholder="e.g. Seattle, USA">
+      </div>
+
+      <div class="field">
+        <label>Water Source</label>
+        <div class="source-grid" id="sourceGrid">
+          <button class="source-btn" data-val="River / Lake" onclick="selectSource(this)"><span class="src-icon">🌊</span>River/Lake</button>
+          <button class="source-btn" data-val="Tap Water" onclick="selectSource(this)"><span class="src-icon">🚰</span>Tap Water</button>
+          <button class="source-btn" data-val="Filtered" onclick="selectSource(this)"><span class="src-icon">💧</span>Filtered</button>
+          <button class="source-btn" data-val="Bottled Water" onclick="selectSource(this)"><span class="src-icon">🍶</span>Bottled</button>
+          <button class="source-btn" data-val="Ocean Water" onclick="selectSource(this)"><span class="src-icon">🌐</span>Ocean</button>
+          <button class="source-btn" data-val="Other" onclick="selectSource(this)"><span class="src-icon">🔬</span>Other</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Particle Count (per 90mL)</label>
+        <input type="number" id="f-count" placeholder="e.g. 24" min="0" oninput="autoSuggestSafety(parseInt(this.value))">
+      </div>
+
+      <div class="field">
+        <label>Dominant Particle Type</label>
+        <select id="f-type">
+          <option value="">— Select —</option>
+          <option>Fibers</option>
+          <option>Fragments</option>
+          <option>Films</option>
+          <option>Beads</option>
+          <option>Mixed</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Safety Level</label>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-bottom:8px;letter-spacing:0.5px">Based on particle count + visual assessment</div>
+        <div class="safety-buttons" style="flex-direction:column;gap:6px">
+          <button class="safety-btn s1" onclick="selectSafety(this, 'minimal')" style="text-align:left;padding:10px 14px">
+            <span style="display:flex;justify-content:space-between;align-items:center">
+              <span>🟢 <strong>Minimal Risk</strong> — 0–5 particles</span>
+              <span style="font-size:10px;opacity:0.6">Comparable to distilled water</span>
+            </span>
+          </button>
+          <button class="safety-btn s2" onclick="selectSafety(this, 'low')" style="text-align:left;padding:10px 14px">
+            <span style="display:flex;justify-content:space-between;align-items:center">
+              <span>🔵 <strong>Low Risk</strong> — 6–15 particles</span>
+              <span style="font-size:10px;opacity:0.6">Below average contamination</span>
+            </span>
+          </button>
+          <button class="safety-btn s3" onclick="selectSafety(this, 'moderate')" style="text-align:left;padding:10px 14px">
+            <span style="display:flex;justify-content:space-between;align-items:center">
+              <span>🟡 <strong>Moderate Risk</strong> — 16–30 particles</span>
+              <span style="font-size:10px;opacity:0.6">Common in urban tap water</span>
+            </span>
+          </button>
+          <button class="safety-btn s4" onclick="selectSafety(this, 'elevated')" style="text-align:left;padding:10px 14px">
+            <span style="display:flex;justify-content:space-between;align-items:center">
+              <span>🟠 <strong>Elevated Risk</strong> — 31–60 particles</span>
+              <span style="font-size:10px;opacity:0.6">Concerning levels, filter recommended</span>
+            </span>
+          </button>
+          <button class="safety-btn s5" onclick="selectSafety(this, 'critical')" style="text-align:left;padding:10px 14px">
+            <span style="display:flex;justify-content:space-between;align-items:center">
+              <span>🔴 <strong>Critical Risk</strong> — 60+ particles</span>
+              <span style="font-size:10px;opacity:0.6">Do not consume untreated</span>
+            </span>
+          </button>
+        </div>
+        <div style="margin-top:10px;padding:10px 14px;background:var(--surface2);border-radius:3px;border:1px solid var(--border);font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);line-height:1.7">
+          💡 <strong style="color:var(--text)">Auto-suggest:</strong> Based on your particle count above, we recommend: <span id="safetyHint" style="color:var(--cyan)">enter a count to see suggestion</span>
+        </div>
+      </div>
+
+      <button class="btn-primary" style="width:100%;margin-top:8px" onclick="submitData()">Submit to Global Database →</button>
+
+      <!-- PHOTO UPLOAD -->
+      <div style="margin-top:16px;border:1px dashed var(--border);border-radius:6px;padding:20px;background:var(--surface2)">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span style="font-size:18px">📸</span>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--text)">Photo Evidence <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);background:var(--surface);padding:2px 6px;border-radius:2px;border:1px solid var(--border);margin-left:6px;letter-spacing:1px">OPTIONAL</span></div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">Upload a photo of your filter/microscope view to help fact-check your results</div>
+          </div>
+        </div>
+
+        <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none" onchange="handlePhotoUpload(event)">
+
+        <div id="photoDropZone" onclick="document.getElementById('photoInput').click()"
+          style="border:1px dashed rgba(0,200,255,0.25);border-radius:4px;padding:20px;text-align:center;cursor:pointer;transition:border-color 0.2s;margin-bottom:12px"
+          onmouseover="this.style.borderColor='rgba(0,200,255,0.5)'"
+          onmouseout="this.style.borderColor='rgba(0,200,255,0.25)'">
+          <div style="font-size:28px;margin-bottom:6px">🔬</div>
+          <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--cyan);letter-spacing:1px">TAP TO UPLOAD PHOTO</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">Filter view, microscope image, or experiment setup</div>
+        </div>
+
+        <div id="photoPreview" style="display:none;margin-bottom:12px">
+          <div style="position:relative;display:inline-block;width:100%">
+            <img id="previewImg" style="width:100%;border-radius:4px;border:1px solid var(--border);max-height:200px;object-fit:cover" src="" alt="Experiment photo"/>
+            <button onclick="clearPhoto()" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.7);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:4px 8px;font-size:10px;cursor:pointer">✕ Remove</button>
+            <div id="photoVerifyBadge" style="position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,0.75);border:1px solid rgba(0,255,136,0.4);border-radius:3px;padding:4px 10px;font-family:'DM Mono',monospace;font-size:9px;color:var(--green);letter-spacing:1px">📎 PHOTO ATTACHED</div>
+          </div>
+        </div>
+
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:12px">
+          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">FACT-CHECK NOTES (optional)</div>
+          <textarea id="photoNotes" placeholder="Describe what's visible in your photo — e.g. 'Blue fibers visible under 40x magnification on white filter paper after density separation'" style="width:100%;background:transparent;border:none;color:var(--text);font-size:12px;font-family:'Manrope',sans-serif;line-height:1.7;resize:vertical;min-height:60px;outline:none;box-sizing:border-box"></textarea>
+        </div>
+
+        <div style="margin-top:10px;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);line-height:1.6">
+          🔒 Photos are stored locally in your browser. Community reviewers can see attached photos and notes to help verify particle counts.
+        </div>
+      </div>
+
+      <div class="submit-result" id="submitResult">
+        <h4>✓ Submitted!</h4>
+        <p>Your data has been added to the global map. Thank you for contributing to open environmental science.</p>
+        <div id="submitPhotoConfirm" style="display:none;margin-top:12px;padding:10px;background:rgba(0,255,136,0.05);border:1px solid rgba(0,255,136,0.2);border-radius:4px;font-family:'DM Mono',monospace;font-size:10px;color:var(--green)">
+          📸 Photo evidence attached — marked for community review
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="form-card" style="margin-bottom:20px">
+        <h3>Submission Guidelines</h3>
+        <p class="form-desc">To ensure data quality and scientific integrity, please follow these guidelines before submitting.</p>
+
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <span style="color:var(--cyan);font-family:'DM Mono',monospace;font-size:12px;flex-shrink:0">01</span>
+            <p style="font-size:12px;color:var(--muted);line-height:1.7">Collect samples using the <strong style="color:var(--text)">density separation method</strong> with salt or sugar solution.</p>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <span style="color:var(--cyan);font-family:'DM Mono',monospace;font-size:12px;flex-shrink:0">02</span>
+            <p style="font-size:12px;color:var(--muted);line-height:1.7">Use a <strong style="color:var(--text)">minimum 20 micron filter</strong> and count particles under magnification.</p>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <span style="color:var(--cyan);font-family:'DM Mono',monospace;font-size:12px;flex-shrink:0">03</span>
+            <p style="font-size:12px;color:var(--muted);line-height:1.7">Run a <strong style="color:var(--text)">blank distilled water control</strong> to subtract background contamination.</p>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <span style="color:var(--cyan);font-family:'DM Mono',monospace;font-size:12px;flex-shrink:0">04</span>
+            <p style="font-size:12px;color:var(--muted);line-height:1.7">Report an <strong style="color:var(--text)">honest count</strong> — uncertain data submitted as approximate still helps.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-card">
+        <h3>Community Impact</h3>
+        <p class="form-desc">Your submission directly contributes to open environmental science.</p>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+            <span style="font-size:12px;color:var(--muted)">Data points collected</span>
+            <span style="font-family:'DM Mono',monospace;font-size:14px;color:var(--cyan)" id="impactCount">0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+            <span style="font-size:12px;color:var(--muted)">Cities mapped</span>
+            <span style="font-family:'DM Mono',monospace;font-size:14px;color:var(--cyan)">89</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0">
+            <span style="font-size:12px;color:var(--muted)">Peer reviews in progress</span>
+            <span style="font-family:'DM Mono',monospace;font-size:14px;color:var(--cyan)">12</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- AWARENESS -->
+<div class="panel" id="panel-awareness">
+  <div style="margin-bottom:32px">
+    <div class="section-label">Learn & Spread Awareness</div>
+  </div>
+
+  <div class="fact-ticker">
+    <h4>⚡ Did You Know</h4>
+    <div class="ticker-text" id="tickerText"></div>
+    <div id="tickerSource" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:6px;letter-spacing:0.5px;opacity:0.7"></div>
+  </div>
+
+  <div class="awareness-grid">
+    <div class="awareness-card danger">
+      <div class="ac-icon">🩸</div>
+      <h4>Microplastics in Human Blood</h4>
+      <p>A 2022 study found microplastics in 77% of human blood samples tested. The long-term health implications are still being studied, but early research suggests links to inflammation and cellular stress.</p>
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.07)">
+        <a href="https://doi.org/10.1016/j.envint.2022.107199" target="_blank" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--cyan);text-decoration:none;letter-spacing:0.5px">📄 Leslie et al. (2022) — Environment International</a>
+      </div>
+    </div>
+    <div class="awareness-card warning">
+      <div class="ac-icon">🫁</div>
+      <h4>We Breathe Them Too</h4>
+      <p>Microplastics have been detected in human lung tissue. Researchers estimate we may inhale up to 121,000 microplastic particles per year depending on our environment.</p>
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.07)">
+        <a href="https://doi.org/10.1016/j.scitotenv.2022.153832" target="_blank" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--cyan);text-decoration:none;letter-spacing:0.5px">📄 Amato-Lourenço et al. (2022) — Science of the Total Environment</a>
+      </div>
+    </div>
+    <div class="awareness-card info">
+      <div class="ac-icon">🐳</div>
+      <h4>Marine Life at Risk</h4>
+      <p>Over 800 marine species are known to be affected by plastic pollution. Microplastics accumulate up the food chain — starting with plankton and ending on our plates.</p>
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.07)">
+        <a href="https://doi.org/10.1038/s41598-021-94515-y" target="_blank" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--cyan);text-decoration:none;letter-spacing:0.5px">📄 Graba-Landry et al. (2021) — Scientific Reports / UNEP (2021)</a>
+      </div>
+    </div>
+    <div class="awareness-card danger">
+      <div class="ac-icon">🌧️</div>
+      <h4>Raining Microplastics</h4>
+      <p>Studies have found microplastics in rainfall in remote areas including the Pyrenees mountains. There is no pristine place on Earth untouched by plastic pollution.</p>
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.07)">
+        <a href="https://doi.org/10.1038/s41561-019-0335-5" target="_blank" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--cyan);text-decoration:none;letter-spacing:0.5px">📄 Allen et al. (2019) — Nature Geoscience</a>
+      </div>
+    </div>
+    <div class="awareness-card warning">
+      <div class="ac-icon">👶</div>
+      <h4>Found in Newborns</h4>
+      <p>Microplastics have been detected in human placentas and meconium (a newborn's first stool), suggesting they can cross the placental barrier during pregnancy.</p>
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.07)">
+        <a href="https://doi.org/10.1016/j.envint.2020.106274" target="_blank" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--cyan);text-decoration:none;letter-spacing:0.5px">📄 Ragusa et al. (2021) — Environment International</a>
+      </div>
+    </div>
+    <div class="awareness-card info">
+      <div class="ac-icon">♻️</div>
+      <h4>What You Can Do</h4>
+      <p>Use water filters, avoid single-use plastics, use a microfiber laundry bag, choose glass or steel water bottles, and share your test results here to help build awareness.</p>
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.07)">
+        <a href="https://www.who.int/news-room/fact-sheets/detail/microplastics-in-drinking-water" target="_blank" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--cyan);text-decoration:none;letter-spacing:0.5px">📄 WHO (2022) — Microplastics in Drinking Water</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">References & Sources</div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:24px;margin-bottom:32px">
+    <p style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-bottom:16px;letter-spacing:1px">PEER-REVIEWED SOURCES</p>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="font-size:11px;color:var(--muted);line-height:1.7;padding-bottom:10px;border-bottom:1px solid var(--border)">
+        <span style="color:var(--cyan);font-family:'DM Mono',monospace">[1]</span> Leslie, H.A. et al. (2022). Discovery and quantification of plastic particle pollution in human blood. <em style="color:var(--text)">Environment International</em>, 163, 107199. <a href="https://doi.org/10.1016/j.envint.2022.107199" target="_blank" style="color:var(--cyan)">doi:10.1016/j.envint.2022.107199</a>
+      </div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.7;padding-bottom:10px;border-bottom:1px solid var(--border)">
+        <span style="color:var(--cyan);font-family:'DM Mono',monospace">[2]</span> Amato-Lourenço, L.F. et al. (2022). An emerging class of air pollutants: Potential effects of microplastics to respiratory human health. <em style="color:var(--text)">Science of the Total Environment</em>, 806, 153832. <a href="https://doi.org/10.1016/j.scitotenv.2022.153832" target="_blank" style="color:var(--cyan)">doi:10.1016/j.scitotenv.2022.153832</a>
+      </div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.7;padding-bottom:10px;border-bottom:1px solid var(--border)">
+        <span style="color:var(--cyan);font-family:'DM Mono',monospace">[3]</span> Allen, S. et al. (2019). Atmospheric transport and deposition of microplastics in a remote mountain catchment. <em style="color:var(--text)">Nature Geoscience</em>, 12, 339–344. <a href="https://doi.org/10.1038/s41561-019-0335-5" target="_blank" style="color:var(--cyan)">doi:10.1038/s41561-019-0335-5</a>
+      </div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.7;padding-bottom:10px;border-bottom:1px solid var(--border)">
+        <span style="color:var(--cyan);font-family:'DM Mono',monospace">[4]</span> Ragusa, A. et al. (2021). Plasticenta: First evidence of microplastics in human placenta. <em style="color:var(--text)">Environment International</em>, 146, 106274. <a href="https://doi.org/10.1016/j.envint.2020.106274" target="_blank" style="color:var(--cyan)">doi:10.1016/j.envint.2020.106274</a>
+      </div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.7;padding-bottom:10px;border-bottom:1px solid var(--border)">
+        <span style="color:var(--cyan);font-family:'DM Mono',monospace">[5]</span> Carney Almroth, B. & Eggert, H. (2019). Marine plastic pollution: Sources, impacts, and policy issues. <em style="color:var(--text)">Review of Environmental Economics and Policy</em>, 13(2), 317–326. <a href="https://doi.org/10.1093/reep/rez012" target="_blank" style="color:var(--cyan)">doi:10.1093/reep/rez012</a>
+      </div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.7;padding-bottom:10px;border-bottom:1px solid var(--border)">
+        <span style="color:var(--cyan);font-family:'DM Mono',monospace">[6]</span> Pirc, U. et al. (2016). Emissions of microplastic fibers from microfiber fleece during domestic washing. <em style="color:var(--text)">Environmental Science and Pollution Research</em>, 23, 22206–22211. <a href="https://doi.org/10.1007/s11356-016-7703-0" target="_blank" style="color:var(--cyan)">doi:10.1007/s11356-016-7703-0</a>
+      </div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.7">
+        <span style="color:var(--cyan);font-family:'DM Mono',monospace">[7]</span> World Health Organization. (2022). <em style="color:var(--text)">Microplastics in drinking-water</em>. WHO Press. <a href="https://www.who.int/news-room/fact-sheets/detail/microplastics-in-drinking-water" target="_blank" style="color:var(--cyan)">who.int</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Share This Research</div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:28px;text-align:center">
+    <p style="font-family:'Clash Display',sans-serif;font-size:22px;color:#fff;margin-bottom:8px">Help spread the word</p>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:24px;max-width:480px;margin-left:auto;margin-right:auto;line-height:1.7">Copy the message below to share HydroWatch with your community, school, or social network.</p>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:16px 20px;margin-bottom:20px;text-align:left">
+      <p style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);line-height:1.8" id="shareText">🔬 Did you know microplastics have been found in human blood, lungs, and even newborns? I'm contributing data to HydroWatch — a community science project tracking microplastic contamination in water worldwide. Test your local water and add your results to the global map. Every data point matters. #HydroWatch #Microplastics #CitizenScience</p>
+    </div>
+    <button class="btn-primary" onclick="copyShare()">Copy Message</button>
+  </div>
+
+  <!-- TEST KIT SECTION -->
+  <div class="section-label" style="margin-top:40px">🧪 Get a Test Kit</div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-bottom:32px">
+
+    <!-- Hero banner -->
+    <div style="background:linear-gradient(135deg,rgba(0,90,140,0.6),rgba(0,200,255,0.1));padding:32px;border-bottom:1px solid var(--border);text-align:center">
+      <div style="font-size:48px;margin-bottom:12px">🔬</div>
+      <h3 style="font-family:'Clash Display',sans-serif;font-size:24px;color:#fff;margin-bottom:8px">HydroWatch Microplastics Test Kit</h3>
+      <p style="font-size:13px;color:var(--muted);max-width:480px;margin:0 auto;line-height:1.7">Everything you need to test your local water for microplastics and submit real data to the global map.</p>
+      <div style="display:inline-block;margin-top:16px;font-family:'DM Mono',monospace;font-size:10px;color:var(--cyan);background:rgba(0,200,255,0.08);border:1px solid rgba(0,200,255,0.25);padding:4px 12px;border-radius:2px;letter-spacing:1px">COMING SOON</div>
+    </div>
+
+    <!-- Kit contents -->
+    <div style="padding:28px;border-bottom:1px solid var(--border)">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:16px">WHAT'S INCLUDED</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+        <div style="display:flex;gap:12px;align-items:flex-start;padding:12px;background:var(--surface2);border-radius:4px;border:1px solid var(--border)">
+          <span style="font-size:20px">🧂</span>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--text)">Salt or Sugar Solution Packets</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">Pre-measured for density separation — both work equally well</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start;padding:12px;background:var(--surface2);border-radius:4px;border:1px solid var(--border)">
+          <span style="font-size:20px">📄</span>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--text)">20 Micron Filter Paper</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">Catches microplastic particles</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start;padding:12px;background:var(--surface2);border-radius:4px;border:1px solid var(--border)">
+          <span style="font-size:20px">🧪</span>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--text)">90mL Sample Bottle</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">Standard size for consistent results</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start;padding:12px;background:var(--surface2);border-radius:4px;border:1px solid var(--border)">
+          <span style="font-size:20px">🥄</span>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--text)">Mixing Stick</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">For salt solution preparation</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start;padding:12px;background:var(--surface2);border-radius:4px;border:1px solid var(--border)">
+          <span style="font-size:20px">📋</span>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--text)">Instruction Card</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">Step-by-step guide + QR code to submit</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start;padding:12px;background:var(--surface2);border-radius:4px;border:1px solid var(--border)">
+          <span style="font-size:20px">🔍</span>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--text)">Magnifying Loupe</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">For counting particles on filter paper</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charity pledge -->
+    <div style="padding:20px 28px;background:linear-gradient(135deg,rgba(0,255,136,0.05),rgba(0,200,255,0.05));border-top:1px solid rgba(0,255,136,0.15);display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <div style="font-size:32px">🌊</div>
+      <div style="flex:1">
+        <div style="font-family:'Clash Display',sans-serif;font-size:16px;font-weight:700;color:var(--green);margin-bottom:4px">70% of proceeds go to ocean cleanup</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.7">Every kit sold directly funds organisations like <a href="https://theoceancleanup.com" target="_blank" style="color:var(--cyan);text-decoration:none">The Ocean Cleanup</a> and other verified plastic removal initiatives. Buying a kit doesn't just help you test your water — it helps clean everyone's.</div>
+      </div>
+      <div style="text-align:center;background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.2);border-radius:4px;padding:12px 20px;flex-shrink:0">
+        <div style="font-family:'Clash Display',sans-serif;font-size:28px;font-weight:700;color:var(--green)">70%</div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px">TO OCEAN CLEANUP</div>
+      </div>
+    </div>
+
+    <!-- Pricing + notify -->
+    <div style="padding:28px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:20px">
+      <div>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:4px">ESTIMATED PRICE</div>
+        <div style="font-family:'Clash Display',sans-serif;font-size:32px;font-weight:700;color:var(--cyan)">$15–25</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">Free shipping on orders over $30</div>
+      </div>
+      <div style="flex:1;max-width:420px">
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">NOTIFY ME WHEN AVAILABLE</div>
+        <div style="display:flex;gap:8px">
+          <input type="email" id="kitEmail" placeholder="your@email.com" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:10px 14px;color:var(--text);font-size:12px;font-family:'Manrope',sans-serif;outline:none">
+          <button onclick="notifyKit()" class="btn-primary" style="white-space:nowrap">Notify Me</button>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px">No spam. One email when kits are ready.</div>
+      </div>
+    </div>
+
+    <!-- How it works -->
+    <div style="padding:24px 28px;background:var(--surface2);border-top:1px solid var(--border)">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:14px">HOW IT WORKS</div>
+      <div style="display:flex;gap:0;flex-wrap:wrap">
+        <div style="display:flex;align-items:flex-start;gap:10px;flex:1;min-width:140px;padding-right:16px">
+          <div style="font-family:'DM Mono',monospace;font-size:18px;font-weight:700;color:var(--cyan);flex-shrink:0">01</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.7">Collect 90mL of your water source</div>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px;flex:1;min-width:140px;padding-right:16px">
+          <div style="font-family:'DM Mono',monospace;font-size:18px;font-weight:700;color:var(--cyan);flex-shrink:0">02</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.7">Mix with salt or sugar solution and filter</div>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px;flex:1;min-width:140px;padding-right:16px">
+          <div style="font-family:'DM Mono',monospace;font-size:18px;font-weight:700;color:var(--cyan);flex-shrink:0">03</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.7">Count particles under the loupe</div>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px;flex:1;min-width:140px">
+          <div style="font-family:'DM Mono',monospace;font-size:18px;font-weight:700;color:var(--cyan);flex-shrink:0">04</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.7">Submit your result to the global map</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- REVIEW -->
+<div class="panel" id="panel-review">
+  <div style="margin-bottom:32px">
+    <div class="section-label">Community Fact-Check Review</div>
+    <p style="font-size:13px;color:var(--muted);margin-top:8px;line-height:1.7;max-width:600px">
+      Help verify community submissions. Each card below shows a result with photo evidence. Vote <strong style="color:var(--green)">✓ Looks Accurate</strong> if the photo matches the count, or <strong style="color:var(--red)">⚠ Flag</strong> if something seems off. Results with enough votes get a verified badge on the map.
+    </p>
+  </div>
+
+  <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap">
+    <button onclick="filterReview('all', this)" class="review-filter-btn active" style="font-family:'DM Mono',monospace;font-size:10px;padding:6px 14px;border-radius:3px;border:1px solid var(--border2);background:var(--surface2);color:var(--cyan);cursor:pointer;letter-spacing:1px">ALL</button>
+    <button onclick="filterReview('pending', this)" class="review-filter-btn" style="font-family:'DM Mono',monospace;font-size:10px;padding:6px 14px;border-radius:3px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;letter-spacing:1px">PENDING</button>
+    <button onclick="filterReview('verified', this)" class="review-filter-btn" style="font-family:'DM Mono',monospace;font-size:10px;padding:6px 14px;border-radius:3px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;letter-spacing:1px">✓ VERIFIED</button>
+    <button onclick="filterReview('flagged', this)" class="review-filter-btn" style="font-family:'DM Mono',monospace;font-size:10px;padding:6px 14px;border-radius:3px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;letter-spacing:1px">⚠ FLAGGED</button>
+    <div style="margin-left:auto;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);align-self:center" id="reviewCount"></div>
+  </div>
+
+  <div id="reviewQueue" style="display:flex;flex-direction:column;gap:16px"></div>
+
+  <div id="reviewEmpty" style="display:none;text-align:center;padding:60px 20px;color:var(--muted)">
+    <div style="font-size:40px;margin-bottom:12px">🔬</div>
+    <div style="font-family:'Clash Display',sans-serif;font-size:18px;color:var(--text);margin-bottom:8px">No submissions to review yet</div>
+    <div style="font-size:12px">Submit a result with a photo in the Submit Data tab to have it appear here for community review.</div>
+  </div>
+</div>
+
+<!-- TRANSPARENCY -->
+<div class="panel" id="panel-transparency">
+  <div style="margin-bottom:32px">
+    <div class="section-label">💚 Transparency Report</div>
+    <p style="font-size:13px;color:var(--muted);margin-top:8px;line-height:1.7;max-width:600px">
+      We promised 70% of every kit sale goes to ocean cleanup. Here is the public record of every sale and every donation — updated as it happens. Nothing hidden.
+    </p>
+  </div>
+
+  <!-- Summary stats -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:32px">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:20px;text-align:center">
+      <div style="font-family:'Clash Display',sans-serif;font-size:32px;font-weight:700;color:var(--cyan)" id="t-kits-sold">0</div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-top:4px">KITS SOLD</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:20px;text-align:center">
+      <div style="font-family:'Clash Display',sans-serif;font-size:32px;font-weight:700;color:var(--text)" id="t-revenue">$0</div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-top:4px">TOTAL REVENUE</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid rgba(0,255,136,0.2);border-radius:6px;padding:20px;text-align:center">
+      <div style="font-family:'Clash Display',sans-serif;font-size:32px;font-weight:700;color:var(--green)" id="t-donated">$0</div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-top:4px">DONATED TO OCEAN CLEANUP</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:20px;text-align:center">
+      <div style="font-family:'Clash Display',sans-serif;font-size:32px;font-weight:700;color:var(--amber)" id="t-kept">$0</div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-top:4px">KEPT FOR APP COSTS</div>
+    </div>
+  </div>
+
+  <!-- Progress bar -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:24px;margin-bottom:32px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:10px">
+      <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px">DONATION GOAL — $500 TO THE OCEAN CLEANUP</span>
+      <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--green)" id="t-goal-pct">0%</span>
+    </div>
+    <div style="background:var(--surface2);border-radius:4px;height:12px;overflow:hidden">
+      <div id="t-goal-bar" style="height:100%;background:linear-gradient(90deg,var(--green),var(--cyan));border-radius:4px;width:0%;transition:width 1s ease"></div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px">Every kit sold gets us closer. Share HydroWatch to help hit the goal. 🌊</div>
+  </div>
+
+  <!-- Donation log -->
+  <div style="margin-bottom:32px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="section-label" style="margin:0">Donation Log</div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px">PUBLIC RECORD</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:hidden">
+      <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px">DATE</div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px">KITS SOLD</div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px">AMOUNT DONATED</div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px">RECEIPT</div>
+      </div>
+      <div id="t-donation-log">
+        <div style="padding:40px 20px;text-align:center;color:var(--muted)">
+          <div style="font-size:28px;margin-bottom:10px">🌱</div>
+          <div style="font-family:'Clash Display',sans-serif;font-size:16px;color:var(--text);margin-bottom:6px">No donations yet</div>
+          <div style="font-size:12px">When kits start selling, every donation will be logged here with a receipt link.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin: Add donation entry (password protected) -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:24px;margin-bottom:32px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;cursor:pointer" onclick="toggleAdminPanel()">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px">🔐 LOG A NEW DONATION (ADMIN ONLY)</div>
+      <div id="admin-arrow" style="color:var(--muted);font-size:12px">▼</div>
+    </div>
+    <div id="admin-panel" style="display:none">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:16px;margin-bottom:16px">
+        <div style="font-size:11px;color:var(--muted);line-height:1.7">This section is for HydroWatch admins only. Enter your admin password to log a new donation entry. All entries are public and cannot be deleted — this ensures full accountability.</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div class="field" style="margin:0">
+          <label style="font-size:11px">Date</label>
+          <input type="date" id="admin-date" style="background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:8px 12px;color:var(--text);font-size:12px;width:100%;outline:none">
+        </div>
+        <div class="field" style="margin:0">
+          <label style="font-size:11px">Kits Sold This Period</label>
+          <input type="number" id="admin-kits" placeholder="e.g. 10" style="background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:8px 12px;color:var(--text);font-size:12px;width:100%;outline:none">
+        </div>
+        <div class="field" style="margin:0">
+          <label style="font-size:11px">Revenue ($)</label>
+          <input type="number" id="admin-revenue" placeholder="e.g. 200" style="background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:8px 12px;color:var(--text);font-size:12px;width:100%;outline:none">
+        </div>
+        <div class="field" style="margin:0">
+          <label style="font-size:11px">Amount Donated ($)</label>
+          <input type="number" id="admin-donated" placeholder="e.g. 140" style="background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:8px 12px;color:var(--text);font-size:12px;width:100%;outline:none">
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:12px">
+        <label style="font-size:11px">Receipt Link (from The Ocean Cleanup)</label>
+        <input type="url" id="admin-receipt" placeholder="https://theoceancleanup.com/receipt/..." style="background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:8px 12px;color:var(--text);font-size:12px;width:100%;outline:none">
+      </div>
+      <div class="field" style="margin-bottom:16px">
+        <label style="font-size:11px">Admin Password</label>
+        <input type="password" id="admin-password" placeholder="••••••••" style="background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:8px 12px;color:var(--text);font-size:12px;width:100%;outline:none">
+      </div>
+      <button onclick="logDonation()" class="btn-primary">Log Donation Entry →</button>
+    </div>
+  </div>
+
+  <!-- Charity info -->
+  <div style="background:var(--surface);border:1px solid rgba(0,255,136,0.15);border-radius:6px;padding:24px;display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
+    <div style="font-size:40px">🌊</div>
+    <div style="flex:1">
+      <div style="font-family:'Clash Display',sans-serif;font-size:18px;color:#fff;margin-bottom:8px">Why The Ocean Cleanup?</div>
+      <p style="font-size:12px;color:var(--muted);line-height:1.8;margin-bottom:12px">The Ocean Cleanup is one of the world's most recognised and scientifically verified ocean plastic removal organisations. They use advanced systems to extract plastic from the Great Pacific Garbage Patch and intercept plastic in rivers before it reaches the ocean. Every dollar donated goes directly to active cleanup operations.</p>
+      <a href="https://theoceancleanup.com" target="_blank" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--cyan);text-decoration:none;letter-spacing:0.5px">→ Visit theoceancleanup.com</a>
+    </div>
+  </div>
+
+  <!-- EXPENSE TRACKER -->
+  <div style="margin-top:32px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="section-label" style="margin:0">📊 Expense Tracker</div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px">FOR TAX RECORDS</div>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:20px;line-height:1.7">Track every business expense here. If you make over $400 profit per year this record helps your parents file taxes correctly. Keep receipts for everything.</p>
+
+    <!-- Expense summary -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px;margin-bottom:24px">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:20px;text-align:center">
+        <div style="font-family:'Clash Display',sans-serif;font-size:28px;font-weight:700;color:var(--red)" id="e-total-expenses">$0</div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-top:4px">TOTAL EXPENSES</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:20px;text-align:center">
+        <div style="font-family:'Clash Display',sans-serif;font-size:28px;font-weight:700;color:var(--cyan)" id="e-total-revenue">$0</div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-top:4px">TOTAL REVENUE</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:20px;text-align:center">
+        <div style="font-family:'Clash Display',sans-serif;font-size:28px;font-weight:700;color:var(--green)" id="e-net-profit">$0</div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-top:4px">NET PROFIT</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:20px;text-align:center">
+        <div style="font-family:'Clash Display',sans-serif;font-size:28px;font-weight:700;color:var(--amber)" id="e-tax-status">$0</div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-top:4px">TAXABLE PROFIT</div>
+      </div>
+    </div>
+
+    <!-- Tax warning -->
+    <div id="e-tax-warning" style="display:none;background:rgba(255,170,0,0.08);border:1px solid rgba(255,170,0,0.3);border-radius:4px;padding:12px 16px;margin-bottom:20px;font-size:12px;color:var(--amber);line-height:1.7">
+      ⚠️ Your profit has exceeded $400 this year. Please let your parents know so they can include this on their tax return as a Schedule C filing.
+    </div>
+
+    <!-- Add expense form -->
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:24px;margin-bottom:20px">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:16px">ADD EXPENSE</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+        <div class="field" style="margin:0">
+          <label style="font-size:11px">Date</label>
+          <input type="date" id="exp-date" style="background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:8px 12px;color:var(--text);font-size:12px;width:100%;outline:none">
+        </div>
+        <div class="field" style="margin:0">
+          <label style="font-size:11px">Category</label>
+          <select id="exp-category" style="background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:8px 12px;color:var(--text);font-size:12px;width:100%;outline:none">
+            <option value="">— Select —</option>
+            <option>Supplies</option>
+            <option>Shipping</option>
+            <option>Packaging</option>
+            <option>Etsy Fees</option>
+            <option>Printing</option>
+            <option>Equipment</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="field" style="margin:0">
+          <label style="font-size:11px">Amount ($)</label>
+          <input type="number" id="exp-amount" placeholder="e.g. 12.99" step="0.01" style="background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:8px 12px;color:var(--text);font-size:12px;width:100%;outline:none">
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:12px">
+        <label style="font-size:11px">Description</label>
+        <input type="text" id="exp-desc" placeholder="e.g. 100x coffee filters from Amazon" style="background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:8px 12px;color:var(--text);font-size:12px;width:100%;outline:none">
+      </div>
+      <div style="display:flex;gap:12px;align-items:center">
+        <div class="field" style="margin:0;flex:1">
+          <label style="font-size:11px">Admin Password</label>
+          <input type="password" id="exp-password" placeholder="••••••••" style="background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:8px 12px;color:var(--text);font-size:12px;width:100%;outline:none">
+        </div>
+        <button onclick="addExpense()" class="btn-primary" style="margin-top:16px;white-space:nowrap">Add Expense →</button>
+      </div>
+    </div>
+
+    <!-- Expense log -->
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:hidden">
+      <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr 1fr 80px;gap:12px">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px">DATE & DESCRIPTION</div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px">CATEGORY</div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px">AMOUNT</div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px">TAX</div>
+      </div>
+      <div id="e-expense-log">
+        <div style="padding:32px 20px;text-align:center;color:var(--muted)">
+          <div style="font-size:24px;margin-bottom:8px">📋</div>
+          <div style="font-size:12px">No expenses logged yet — add your first supply purchase above</div>
+        </div>
+      </div>
+      <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end">
+        <button onclick="exportExpenses()" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--cyan);background:transparent;border:1px solid rgba(0,200,255,0.25);border-radius:3px;padding:6px 14px;cursor:pointer;letter-spacing:0.5px">⬇ Export as CSV</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============ STATE ============
+let selectedSource = '';
+let selectedSafety = '';
+let submissions = [];
+
+// ============ SEED DATA ============
+const seedData = [];
+
+submissions = [...seedData];
+
+// ============ NAV ============
+let mapRendered = false;
+function showPanel(name, btn) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  if (btn) btn.classList.add('active');
+  if (name === 'map' && !mapRendered) {
+    mapRendered = true;
+    setTimeout(() => { renderMap(); renderRegionChart(); }, 50);
+  }
+  if (name === 'review') {
+    renderReviewQueue();
+  }
+  if (name === 'transparency') {
+    loadTransparencyData();
+  }
+}
+
+// ============ CHARTS ============
+const sourceStats = [
+  { label: 'River / Lake', avg: 58, color: '#3b82f6' },
+  { label: 'Ocean Water', avg: 34, color: '#0ea5e9' },
+  { label: 'Bottled Water', avg: 18, color: '#a855f7' },
+  { label: 'Tap Water', avg: 11, color: '#06b6d4' },
+  { label: 'Filtered', avg: 3, color: '#00ff88' },
+];
+
+function renderSourceChart() {
+  const c = document.getElementById('sourceBarChart');
+  c.innerHTML = '';
+  const max = Math.max(...sourceStats.map(s => s.avg));
+  sourceStats.forEach(s => {
+    const w = Math.round((s.avg / max) * 100);
+    c.innerHTML += `
+      <div class="bar-row">
+        <div class="bar-label">${s.label}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${w}%;background:${s.color}"></div></div>
+        <div class="bar-val">${s.avg}</div>
+      </div>`;
+  });
+}
+
+function renderDonut() {
+  const types = [
+    { label: 'Fibers', pct: 42, color: '#00d4ff' },
+    { label: 'Fragments', pct: 28, color: '#a855f7' },
+    { label: 'Mixed', pct: 18, color: '#ffaa00' },
+    { label: 'Films', pct: 8, color: '#ff3d5a' },
+    { label: 'Beads', pct: 4, color: '#00ff88' },
+  ];
+  const svg = document.getElementById('donutSvg');
+  const legend = document.getElementById('donutLegend');
+  const cx = 60, cy = 60, r = 45, inner = 28;
+  let startAngle = -Math.PI / 2;
+  let paths = '';
+  types.forEach(t => {
+    const angle = (t.pct / 100) * Math.PI * 2;
+    const x1 = cx + r * Math.cos(startAngle);
+    const y1 = cy + r * Math.sin(startAngle);
+    const x2 = cx + r * Math.cos(startAngle + angle);
+    const y2 = cy + r * Math.sin(startAngle + angle);
+    const xi1 = cx + inner * Math.cos(startAngle);
+    const yi1 = cy + inner * Math.sin(startAngle);
+    const xi2 = cx + inner * Math.cos(startAngle + angle);
+    const yi2 = cy + inner * Math.sin(startAngle + angle);
+    const large = angle > Math.PI ? 1 : 0;
+    paths += `<path d="M${xi1} ${yi1} L${x1} ${y1} A${r} ${r} 0 ${large} 1 ${x2} ${y2} L${xi2} ${yi2} A${inner} ${inner} 0 ${large} 0 ${xi1} ${yi1}" fill="${t.color}" opacity="0.85"/>`;
+    startAngle += angle;
+    legend.innerHTML += `<div class="donut-legend-item"><div class="donut-swatch" style="background:${t.color}"></div>${t.label} <span style="margin-left:auto;font-family:'DM Mono',monospace;font-size:11px">${t.pct}%</span></div>`;
+  });
+  svg.innerHTML = paths;
+}
+
+function renderLeaderboard() {
+  const mostC = document.getElementById('mostContaminated');
+  const cleanestS = document.getElementById('cleanestSources');
+  const sorted = [...submissions].sort((a,b) => b.count - a.count);
+  const safest = [...submissions].filter(s=>s.safety==='minimal'||s.safety==='safe').sort((a,b)=>a.count-b.count);
+  const rankClass = i => i===0?'gold':i===1?'silver':i===2?'bronze':'';
+  const emptyMsg = '<div style="padding:24px;text-align:center;font-size:11px;color:var(--muted)">No data yet — submit a result to appear here</div>';
+  if (sorted.length === 0) { mostC.innerHTML = emptyMsg; cleanestS.innerHTML = emptyMsg; return; }
+  sorted.slice(0,5).forEach((s,i)=>{
+    mostC.innerHTML += `<div class="lb-row">
+      <div class="lb-rank ${rankClass(i)}">${i+1}</div>
+      <div class="lb-name">${s.location}<br><span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">${s.source}</span></div>
+      <div class="lb-bar-wrap"><div class="lb-bar" style="width:${Math.min(100,s.count)}%;background:var(--red)"></div></div>
+      <div class="lb-value" style="color:var(--red)">${s.count}p</div>
+    </div>`;
+  });
+  (safest.length ? safest : submissions).slice(0,5).forEach((s,i)=>{
+    cleanestS.innerHTML += `<div class="lb-row">
+      <div class="lb-rank ${rankClass(i)}">${i+1}</div>
+      <div class="lb-name">${s.location}<br><span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">${s.source}</span></div>
+      <div class="lb-bar-wrap"><div class="lb-bar" style="width:${Math.max(5,s.count)}%;background:var(--green)"></div></div>
+      <div class="lb-value" style="color:var(--green)">${s.count}p</div>
+    </div>`;
+  });
+}
+
+function renderCleaningRate() {
+  const el = document.getElementById('cleaningRate');
+  el.innerHTML = '';
+
+  // Group by city name (first part before comma, or full name)
+  const rawSources = ['River / Lake', 'Ocean Water', 'Tap Water', 'Bottled Water'];
+  const cityMap = {};
+
+  submissions.forEach(s => {
+    const city = s.location;
+    if (!cityMap[city]) cityMap[city] = { raw: [], filtered: [] };
+    if (s.source === 'Filtered') cityMap[city].filtered.push(s.count);
+    else if (rawSources.includes(s.source)) cityMap[city].raw.push(s.count);
+  });
+
+  // Calculate reduction % for cities that have both raw and filtered
+  const ranked = [];
+  Object.entries(cityMap).forEach(([city, data]) => {
+    if (data.raw.length === 0 || data.filtered.length === 0) return;
+    const avgRaw = data.raw.reduce((a,b)=>a+b,0) / data.raw.length;
+    const avgFiltered = data.filtered.reduce((a,b)=>a+b,0) / data.filtered.length;
+    if (avgRaw === 0) return;
+    const reduction = Math.round(((avgRaw - avgFiltered) / avgRaw) * 100);
+    ranked.push({ city, avgRaw: Math.round(avgRaw), avgFiltered: Math.round(avgFiltered), reduction });
+  });
+
+  ranked.sort((a, b) => b.reduction - a.reduction);
+
+  if (ranked.length === 0) {
+    el.innerHTML = `<div style="padding:24px 20px;text-align:center;font-size:12px;color:var(--muted)">No paired data yet. Submit both a raw source and filtered reading from the same city to appear here.</div>`;
+    return;
+  }
+
+  const rankClass = i => i===0?'gold':i===1?'silver':i===2?'bronze':'';
+  const medal = i => i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
+
+  ranked.forEach((item, i) => {
+    const barColor = item.reduction >= 80 ? 'var(--green)' : item.reduction >= 60 ? '#00aaff' : item.reduction >= 40 ? 'var(--amber)' : '#ff7a00';
+    const highlight = i === 0 ? 'background:rgba(0,255,136,0.04);' : '';
+    const topBar = i === 0 ? '<div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--green),transparent)"></div>' : '';
+    const topBadge = i === 0 ? '<span style="font-family:DM Mono,monospace;font-size:9px;color:var(--green);background:rgba(0,255,136,0.1);border:1px solid rgba(0,255,136,0.2);padding:2px 6px;border-radius:2px;margin-left:6px;letter-spacing:1px">TOP PERFORMER</span>' : '';
+    el.innerHTML += '<div class="lb-row" style="' + highlight + 'position:relative;overflow:hidden">'
+      + topBar
+      + '<div class="lb-rank ' + rankClass(i) + '">' + (medal(i) || i+1) + '</div>'
+      + '<div style="flex:1">'
+      + '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px">' + item.city + topBadge + '</div>'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
+      + '<span style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted)">' + item.avgRaw + 'p raw</span>'
+      + '<span style="color:var(--muted);font-size:10px">→</span>'
+      + '<span style="font-family:DM Mono,monospace;font-size:10px;color:' + barColor + '">' + item.avgFiltered + 'p filtered</span>'
+      + '</div>'
+      + '<div style="position:relative;height:5px;background:var(--muted2);border-radius:3px;overflow:hidden">'
+      + '<div style="position:absolute;left:0;top:0;height:100%;width:' + item.reduction + '%;background:' + barColor + ';border-radius:3px;transition:width 1s ease"></div>'
+      + '</div>'
+      + '</div>'
+      + '<div style="text-align:right;min-width:54px">'
+      + '<div style="font-size:20px;font-weight:700;color:' + barColor + ';line-height:1">' + item.reduction + '%</div>'
+      + '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);letter-spacing:0.5px">reduction</div>'
+      + '</div>'
+      + '</div>';
+  });
+}
+
+function renderFeed() {
+  const feed = document.getElementById('feedList');
+  feed.innerHTML = '';
+  if (submissions.length === 0) {
+    feed.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--muted)">'
+      + '<div style="font-size:32px;margin-bottom:12px">🔬</div>'
+      + '<div style="font-family:Clash Display,sans-serif;font-size:16px;color:var(--text);margin-bottom:6px">No submissions yet</div>'
+      + '<div style="font-size:12px;line-height:1.7">Be the first to submit a water test result.<br>Head to the <strong style="color:var(--cyan)">Submit Data</strong> tab to get started.</div>'
+      + '</div>';
+    return;
+  }
+  const icons = {'River / Lake':'🌊','Tap Water':'🚰','Filtered':'💧','Bottled Water':'🍶','Ocean Water':'🌐','Other':'🔬'};
+  const recent = [...submissions].reverse().slice(0,8);
+  recent.forEach(s=>{
+    const safetyMap = {
+      minimal: {cls:'badge-safe', label:'Minimal', color:'var(--green)'},
+      low:     {cls:'badge-low',  label:'Low Risk', color:'#00aaff'},
+      moderate:{cls:'badge-mod',  label:'Moderate', color:'var(--amber)'},
+      elevated:{cls:'badge-elev', label:'Elevated', color:'#ff7a00'},
+      critical:{cls:'badge-unsafe',label:'Critical', color:'var(--red)'},
+      // legacy
+      safe:{cls:'badge-safe',label:'Minimal',color:'var(--green)'},
+      mod:{cls:'badge-mod',label:'Moderate',color:'var(--amber)'},
+      unsafe:{cls:'badge-unsafe',label:'Critical',color:'var(--red)'},
+    };
+    const sm = safetyMap[s.safety] || {cls:'badge-mod',label:s.safety,color:'var(--muted)'};
+    const smColor = sm.color;
+    const photoBadge = s.hasPhoto ? '<span style="font-family:DM Mono,monospace;font-size:9px;color:var(--cyan);background:rgba(0,200,255,0.08);border:1px solid rgba(0,200,255,0.2);border-radius:2px;padding:2px 5px;margin-right:4px;letter-spacing:0.5px">📸 VERIFIED</span>' : '';
+    feed.innerHTML += '<div class="feed-item">'
+      + '<div class="feed-icon">' + (icons[s.source]||'🔬') + '</div>'
+      + '<div class="feed-info">'
+      + '<div class="location">' + s.location + '</div>'
+      + '<div class="detail">' + s.source + ' · ' + s.count + ' particles · ' + (s.type||'Unknown type') + '</div>'
+      + '</div>'
+      + photoBadge
+      + '<span class="feed-badge" style="background:' + smColor + '18;color:' + smColor + ';border:1px solid ' + smColor + '44">' + sm.label + '</span>'
+      + '<span class="time-ago">' + s.time + '</span>'
+      + '</div>';
+  });
+}
+
+// ============ MAP ============
+const mapPins = [];
+let mapEventsAttached = false;
+
+async function renderMap() {
+  const svg = document.getElementById('mapSvg');
+  mapPins.length = 0;
+
+  const W = 960, H = 480;
+
+  svg.innerHTML = '<defs>'
+    + '<filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>'
+    + '</defs>'
+    + '<line x1="0" y1="240" x2="960" y2="240" stroke="rgba(0,200,255,0.06)" stroke-width="1"/>'
+    + '<line x1="480" y1="0" x2="480" y2="480" stroke="rgba(0,200,255,0.06)" stroke-width="1"/>'
+    + '<line x1="0" y1="160" x2="960" y2="160" stroke="rgba(0,200,255,0.025)" stroke-width="1" stroke-dasharray="4,8"/>'
+    + '<line x1="0" y1="320" x2="960" y2="320" stroke="rgba(0,200,255,0.025)" stroke-width="1" stroke-dasharray="4,8"/>'
+    + '<line x1="240" y1="0" x2="240" y2="480" stroke="rgba(0,200,255,0.025)" stroke-width="1" stroke-dasharray="4,8"/>'
+    + '<line x1="720" y1="0" x2="720" y2="480" stroke="rgba(0,200,255,0.025)" stroke-width="1" stroke-dasharray="4,8"/>'
+    // All continent paths — generated from real lat/lng using equirectangular projection
+    // so they align perfectly with pin coordinates
+    + '<path d="M32.0 48.0 L106.7 48.0 L160.0 58.7 L213.3 48.0 L266.7 48.0 L306.7 53.3 L333.3 74.7 L341.3 117.3 L304.0 122.7 L293.3 128.0 L280.0 146.7 L266.7 173.3 L248.0 200.0 L258.7 218.7 L274.7 218.7 L274.7 186.7 L245.3 186.7 L240.0 197.3 L234.7 197.3 L234.7 192.0 L245.3 181.3 L240.0 165.3 L221.3 170.7 L221.3 186.7 L200.0 181.3 L186.7 176.0 L165.3 160.0 L146.7 138.7 L149.3 106.7 L133.3 93.3 L106.7 80.0 L74.7 85.3 L48.0 80.0 L32.0 66.7 Z" fill="rgba(0,90,140,0.28)" stroke="rgba(0,200,255,0.3)" stroke-width="0.7"/>'
+    + '<path d="M341.3 18.7 L426.7 18.7 L440.0 37.3 L426.7 53.3 L400.0 58.7 L360.0 80.0 L341.3 74.7 L325.3 58.7 L341.3 45.3 Z" fill="rgba(0,90,140,0.28)" stroke="rgba(0,200,255,0.3)" stroke-width="0.7"/>'
+    + '<path d="M240.0 197.3 L170.7 208.0 L165.3 218.7 L170.7 229.3 L176.0 240.0 L170.7 245.3 L165.3 240.0 L160.0 229.3 L154.7 213.3 L154.7 197.3 Z" fill="rgba(0,90,140,0.28)" stroke="rgba(0,200,255,0.3)" stroke-width="0.7"/>'
+    + '<path d="M266.7 208.0 L280.0 213.3 L314.7 208.0 L346.7 229.3 L352.0 242.7 L389.3 250.7 L389.3 266.7 L378.7 280.0 L373.3 293.3 L362.7 301.3 L352.0 314.7 L341.3 325.3 L325.3 341.3 L314.7 352.0 L304.0 362.7 L298.7 378.7 L293.3 389.3 L288.0 373.3 L298.7 360.0 L304.0 346.7 L293.3 320.0 L288.0 298.7 L293.3 288.0 L280.0 266.7 L266.7 245.3 Z" fill="rgba(0,90,140,0.28)" stroke="rgba(0,200,255,0.3)" stroke-width="0.7"/>'
+    + '<path d="M453.3 144.0 L458.7 138.7 L458.7 122.7 L474.7 122.7 L474.7 112.0 L485.3 106.7 L501.3 96.0 L512.0 90.7 L522.7 85.3 L533.3 80.0 L544.0 80.0 L554.7 85.3 L560.0 90.7 L549.3 101.3 L538.7 106.7 L528.0 112.0 L517.3 117.3 L506.7 122.7 L490.7 122.7 L474.7 122.7 L458.7 122.7 Z" fill="rgba(0,90,140,0.28)" stroke="rgba(0,200,255,0.3)" stroke-width="0.7"/>'
+    + '<path d="M493.3 85.3 L512.0 90.7 L528.0 80.0 L533.3 69.3 L549.3 48.0 L554.7 53.3 L549.3 69.3 L538.7 80.0 L517.3 90.7 L506.7 90.7 Z" fill="rgba(0,90,140,0.28)" stroke="rgba(0,200,255,0.3)" stroke-width="0.7"/>'
+    + '<path d="M464.0 106.7 L474.7 101.3 L480.0 96.0 L474.7 90.7 L464.0 90.7 L458.7 96.0 L458.7 101.3 Z" fill="rgba(0,90,140,0.28)" stroke="rgba(0,200,255,0.3)" stroke-width="0.7"/>'
+    + '<path d="M432.0 197.3 L437.3 186.7 L437.3 165.3 L453.3 144.0 L474.7 144.0 L506.7 138.7 L512.0 154.7 L522.7 160.0 L538.7 160.0 L565.3 160.0 L581.3 181.3 L597.3 208.0 L597.3 234.7 L586.7 245.3 L570.7 266.7 L576.0 288.0 L554.7 330.7 L528.0 330.7 L506.7 288.0 L501.3 250.7 L469.3 229.3 L442.7 213.3 L432.0 202.7 Z" fill="rgba(0,90,140,0.28)" stroke="rgba(0,200,255,0.3)" stroke-width="0.7"/>'
+    + '<path d="M597.3 272.0 L608.0 277.3 L613.3 288.0 L608.0 304.0 L597.3 309.3 L597.3 293.3 Z" fill="rgba(0,90,140,0.28)" stroke="rgba(0,200,255,0.3)" stroke-width="0.7"/>'
+    + '<path d="M560.0 90.7 L586.7 80.0 L613.3 64.0 L634.7 74.7 L618.7 96.0 L597.3 117.3 L576.0 122.7 L554.7 112.0 L549.3 101.3 Z" fill="rgba(0,90,140,0.28)" stroke="rgba(0,200,255,0.3)" stroke-width="0.7"/>'
+    + '<path d="M549.3 48.0 L640.0 48.0 L746.7 48.0 L853.3 53.3 L906.7 58.7 L933.3 69.3 L920.0 80.0 L880.0 96.0 L866.7 117.3 L840.0 149.3 L805.3 165.3 L757.3 213.3 L736.0 229.3 L714.7 245.3 L693.3 218.7 L661.3 181.3 L629.3 176.0 L613.3 170.7 L586.7 186.7 L576.0 202.7 L602.7 213.3 L634.7 186.7 L661.3 170.7 L682.7 208.0 L714.7 213.3 L736.0 176.0 L768.0 192.0 L794.7 218.7 L768.0 245.3 L736.0 229.3 L704.0 245.3 L682.7 208.0 L650.7 181.3 L634.7 160.0 L597.3 144.0 L576.0 128.0 L554.7 112.0 L549.3 101.3 L560.0 80.0 L597.3 58.7 L640.0 48.0 Z" fill="rgba(0,90,140,0.28)" stroke="rgba(0,200,255,0.3)" stroke-width="0.7"/>'
+    + '<path d="M576.0 160.0 L597.3 208.0 L629.3 202.7 L640.0 186.7 L629.3 170.7 L608.0 160.0 Z" fill="rgba(0,90,140,0.28)" stroke="rgba(0,200,255,0.3)" stroke-width="0.7"/>'
+    + '<path d="M661.3 181.3 L682.7 192.0 L693.3 218.7 L682.7 208.0 L672.0 192.0 Z" fill="rgba(0,90,140,0.28)" stroke="rgba(0,200,255,0.3)" stroke-width="0.7"/>'
+    + '<path d="M746.7 181.3 L757.3 192.0 L752.0 213.3 L757.3 229.3 L746.7 229.3 L741.3 213.3 L741.3 197.3 Z" fill="rgba(0,90,140,0.28)" stroke="rgba(0,200,255,0.3)" stroke-width="0.7"/>'
+    + '<path d="M826.7 154.7 L853.3 133.3 L858.7 138.7 L853.3 144.0 L842.7 154.7 Z" fill="rgba(0,90,140,0.28)" stroke="rgba(0,200,255,0.3)" stroke-width="0.7"/>'
+    + '<path d="M768.0 229.3 L789.3 218.7 L794.7 224.0 L789.3 229.3 L778.7 229.3 Z" fill="rgba(0,90,140,0.28)" stroke="rgba(0,200,255,0.3)" stroke-width="0.7"/>'
+    + '<path d="M736.0 229.3 L752.0 234.7 L768.0 240.0 L757.3 250.7 L741.3 250.7 L736.0 240.0 Z" fill="rgba(0,90,140,0.28)" stroke="rgba(0,200,255,0.3)" stroke-width="0.7"/>'
+    + '<path d="M784.0 298.7 L821.3 277.3 L848.0 277.3 L858.7 298.7 L874.7 314.7 L885.3 336.0 L864.0 341.3 L826.7 325.3 L805.3 314.7 L784.0 298.7 Z" fill="rgba(0,90,140,0.28)" stroke="rgba(0,200,255,0.3)" stroke-width="0.7"/>'
+    + '<path d="M938.7 336.0 L954.7 341.3 L944.0 352.0 L933.3 346.7 Z" fill="rgba(0,90,140,0.28)" stroke="rgba(0,200,255,0.3)" stroke-width="0.7"/>'
+    + '<path d="M928.0 357.3 L938.7 357.3 L933.3 368.0 L922.7 362.7 Z" fill="rgba(0,90,140,0.28)" stroke="rgba(0,200,255,0.3)" stroke-width="0.7"/>'
+    + '<path d="M416.0 58.7 L437.3 58.7 L448.0 64.0 L437.3 69.3 L416.0 69.3 L410.7 64.0 Z" fill="rgba(0,90,140,0.28)" stroke="rgba(0,200,255,0.3)" stroke-width="0.7"/>'
+    + '<path d="M794.7 192.0 L810.7 208.0 L805.3 218.7 L794.7 202.7 Z" fill="rgba(0,90,140,0.28)" stroke="rgba(0,200,255,0.3)" stroke-width="0.7"/>'
+    + '<path d="M693.3 213.3 L698.7 213.3 L693.3 224.0 L688.0 218.7 Z" fill="rgba(0,90,140,0.28)" stroke="rgba(0,200,255,0.3)" stroke-width="0.7"/>';
+
+  // Now add pins on top
+  const colorMap = {minimal:'#00ff88',low:'#00aaff',moderate:'#ffaa00',elevated:'#ff7a00',critical:'#ff3d5a',safe:'#00ff88',mod:'#ffaa00',unsafe:'#ff3d5a'};
+  const seen = new Set();
+
+  submissions.forEach(s => {
+    if (s.lat == null || s.lng == null) return;
+    const key = s.lat + ',' + s.lng + ',' + s.safety;
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    const x = ((s.lng + 180) / 360) * W;
+    const y = ((90 - s.lat) / 180) * H;
+    const color = colorMap[s.safety] || '#888';
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.setAttribute('transform', 'translate(' + x + ',' + y + ')');
+    g.innerHTML = '<circle r="12" fill="' + color + '" opacity="0.1"/>'
+      + '<circle r="5" fill="' + color + '" opacity="0.9" filter="url(#glow)"/>';
+    svg.appendChild(g);
+    mapPins.push({ x, y, color, s });
+  });
+
+  // Attach mouse events only once
+  if (!mapEventsAttached) {
+    mapEventsAttached = true;
+    const tooltip = document.getElementById('pinTooltip');
+    const safetyLabel = {minimal:'Minimal Risk',low:'Low Risk',moderate:'Moderate Risk',elevated:'Elevated Risk',critical:'Critical Risk',safe:'Minimal Risk',mod:'Moderate Risk',unsafe:'Critical Risk'};
+
+    svg.addEventListener('mousemove', e => {
+      try {
+        const rect = svg.getBoundingClientRect();
+        if (!rect.width) return;
+        const scaleX = W / rect.width;
+        const scaleY = H / rect.height;
+        const mx = (e.clientX - rect.left) * scaleX;
+        const my = (e.clientY - rect.top) * scaleY;
+
+        let closest = null, minDist = 20;
+        mapPins.forEach(p => {
+          const d = Math.sqrt((mx - p.x) ** 2 + (my - p.y) ** 2);
+          if (d < minDist) { minDist = d; closest = p; }
+        });
+
+        if (closest) {
+          const { s, color } = closest;
+          const sl = safetyLabel[s.safety] || s.safety;
+          tooltip.innerHTML = '<div style="font-family:Clash Display,sans-serif;font-size:14px;font-weight:700;color:' + color + ';margin-bottom:4px">' + s.location + '</div>'
+            + '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);margin-bottom:6px">' + s.source + '</div>'
+            + '<div style="display:flex;gap:12px;align-items:center">'
+            + '<span style="font-family:DM Mono,monospace;font-size:12px;color:var(--text)">' + s.count + ' particles</span>'
+            + '<span style="font-family:DM Mono,monospace;font-size:10px;color:' + color + ';padding:2px 6px;border:1px solid ' + color + '44;border-radius:2px">' + sl + '</span>'
+            + '</div>';
+          const cr = svg.parentElement.getBoundingClientRect();
+          let tx = e.clientX - cr.left + 16;
+          let ty = e.clientY - cr.top - 20;
+          if (tx + 220 > cr.width) tx = e.clientX - cr.left - 236;
+          if (ty < 0) ty = 4;
+          tooltip.style.left = tx + 'px';
+          tooltip.style.top = ty + 'px';
+          tooltip.classList.add('visible');
+        } else {
+          tooltip.classList.remove('visible');
+        }
+      } catch(err) {}
+    });
+
+    svg.addEventListener('mouseleave', () => {
+      document.getElementById('pinTooltip').classList.remove('visible');
+    });
+  }
+}
+
+function renderRegionChart() {
+  const regions = [
+    { label: 'South/SE Asia', avg: 74, color: '#ff3d5a' },
+    { label: 'South America', avg: 58, color: '#ff8c42' },
+    { label: 'Africa', avg: 45, color: '#ffaa00' },
+    { label: 'North America', avg: 22, color: '#06b6d4' },
+    { label: 'Europe', avg: 14, color: '#a855f7' },
+    { label: 'Oceania', avg: 18, color: '#00d4ff' },
+  ];
+  const c = document.getElementById('regionChart');
+  const max = 80;
+  c.innerHTML = '';
+  regions.forEach(r => {
+    const w = Math.round((r.avg/max)*100);
+    c.innerHTML += `<div class="bar-row">
+      <div class="bar-label">${r.label}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${w}%;background:${r.color}"></div></div>
+      <div class="bar-val">${r.avg}</div>
+    </div>`;
+  });
+}
+
+// ============ PHOTO UPLOAD ============
+let currentPhotoDataUrl = null;
+
+function handlePhotoUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { showToast('Please upload an image file', '#ffaa00'); return; }
+  if (file.size > 5 * 1024 * 1024) { showToast('Photo must be under 5MB', '#ffaa00'); return; }
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    currentPhotoDataUrl = e.target.result;
+    document.getElementById('previewImg').src = currentPhotoDataUrl;
+    document.getElementById('photoPreview').style.display = 'block';
+    document.getElementById('photoDropZone').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearPhoto() {
+  currentPhotoDataUrl = null;
+  document.getElementById('photoInput').value = '';
+  document.getElementById('previewImg').src = '';
+  document.getElementById('photoPreview').style.display = 'none';
+  document.getElementById('photoDropZone').style.display = 'block';
+}
+
+// Drag and drop support
+document.addEventListener('DOMContentLoaded', () => {
+  const zone = document.getElementById('photoDropZone');
+  if (!zone) return;
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.style.borderColor = 'rgba(0,200,255,0.6)'; zone.style.background = 'rgba(0,200,255,0.04)'; });
+  zone.addEventListener('dragleave', e => { zone.style.borderColor = 'rgba(0,200,255,0.25)'; zone.style.background = 'transparent'; });
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.style.borderColor = 'rgba(0,200,255,0.25)';
+    zone.style.background = 'transparent';
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      document.getElementById('photoInput').files = dt.files;
+      handlePhotoUpload({ target: { files: dt.files } });
+    }
+  });
+});
+function selectSource(btn) {
+  document.querySelectorAll('.source-btn').forEach(b=>b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedSource = btn.dataset.val;
+}
+
+function selectSafety(btn, val) {
+  document.querySelectorAll('.safety-btn').forEach(b=>b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedSafety = val;
+}
+
+function autoSuggestSafety(count) {
+  const hint = document.getElementById('safetyHint');
+  if (!hint) return;
+  if (!count || isNaN(count)) { hint.textContent = 'enter a count to see suggestion'; hint.style.color='var(--cyan)'; return; }
+  let suggestion, color;
+  if (count <= 5)       { suggestion = '🟢 Minimal Risk (0–5)'; color = 'var(--green)'; }
+  else if (count <= 15) { suggestion = '🔵 Low Risk (6–15)'; color = '#00aaff'; }
+  else if (count <= 30) { suggestion = '🟡 Moderate Risk (16–30)'; color = 'var(--amber)'; }
+  else if (count <= 60) { suggestion = '🟠 Elevated Risk (31–60)'; color = '#ff7a00'; }
+  else                  { suggestion = '🔴 Critical Risk (60+)'; color = 'var(--red)'; }
+  hint.textContent = suggestion;
+  hint.style.color = color;
+}
+
+async function submitData() {
+  const loc = document.getElementById('f-location').value.trim();
+  const count = parseInt(document.getElementById('f-count').value);
+  const type = document.getElementById('f-type').value;
+
+  if (!loc || !selectedSource || !count || !selectedSafety) {
+    showToast('Please fill in all fields ⚠️', '#ffaa00');
+    return;
+  }
+
+  const newEntry = { location: loc, source: selectedSource, count, type: type||'Unknown', safety: selectedSafety, lat: null, lng: null, time: 'just now', hasPhoto: !!currentPhotoDataUrl, photoNotes: document.getElementById('photoNotes').value.trim() };
+  submissions.unshift(newEntry);
+
+  // Save to shared storage
+  try {
+    const existing = await window.storage.get('submissions');
+    const all = existing ? JSON.parse(existing.value) : [];
+    all.unshift(newEntry);
+    await window.storage.set('submissions', JSON.stringify(all.slice(0, 500)), true);
+  } catch(e) {}
+
+  document.getElementById('submitResult').style.display = 'block';
+
+  // Show photo confirmation if photo was attached
+  const photoConfirm = document.getElementById('submitPhotoConfirm');
+  if (currentPhotoDataUrl) {
+    photoConfirm.style.display = 'block';
+    showToast('✓ Submitted with photo evidence!');
+  } else {
+    photoConfirm.style.display = 'none';
+    showToast('✓ Submitted to global database!');
+  }
+
+  // Reset photo fields
+  clearPhoto();
+  document.getElementById('photoNotes').value = '';
+
+  updateStats();
+  refreshDashboard();
+}
+
+function refreshDashboard() {
+  document.getElementById('mostContaminated').innerHTML = '';
+  document.getElementById('cleanestSources').innerHTML = '';
+  renderLeaderboard();
+  renderCleaningRate();
+  renderFeed();
+}
+
+// ============ AWARENESS ============
+const facts = [
+  { text: 'Researchers estimate humans consume roughly <strong>5 grams of microplastics per week</strong> — the weight of a credit card.', source: 'WWF & Dalberg (2019) — No Plastic in Nature' },
+  { text: 'A 2020 study found microplastics in <strong>all 47 seafood samples</strong> tested including fish, shellfish, and shrimp.', source: 'Dawson et al. (2020) — Environmental Science & Technology' },
+  { text: 'Synthetic clothing releases up to <strong>700,000 microplastic fibers</strong> per wash cycle into wastewater.', source: 'Pirc et al. (2016) — Environmental Science & Pollution Research' },
+  { text: 'The average person may drink <strong>100,000 microplastic particles per year</strong> from bottled water alone.', source: 'Mason et al. (2018) — State University of New York / WHO' },
+  { text: 'Microplastics have been found in <strong>Arctic sea ice</strong>, remote mountain snow, and deep ocean sediments.', source: 'Obbard et al. (2014) — Earth\'s Future; Allen et al. (2019) — Nature Geoscience' },
+  { text: 'By 2050, there could be <strong>more plastic in the ocean by weight</strong> than fish if current trends continue.', source: 'Ellen MacArthur Foundation (2016) — The New Plastics Economy' },
+  { text: 'Tap water contains fewer microplastics than bottled water in <strong>most countries studied</strong> — filters help even more.', source: 'WHO (2022) — Microplastics in Drinking Water' },
+];
+
+let factIndex = 0;
+function rotateFact() {
+  const el = document.getElementById('tickerText');
+  const src = document.getElementById('tickerSource');
+  el.style.opacity = 0;
+  if (src) src.style.opacity = 0;
+  setTimeout(() => {
+    const fact = facts[factIndex % facts.length];
+    el.innerHTML = fact.text;
+    if (src) { src.textContent = '— ' + fact.source; src.style.transition = 'opacity 0.5s'; src.style.opacity = 1; }
+    el.style.transition = 'opacity 0.5s';
+    el.style.opacity = 1;
+    factIndex++;
+  }, 300);
+}
+
+// ============ SHARE ============
+function copyShare() {
+  const text = document.getElementById('shareText').textContent;
+  navigator.clipboard.writeText(text).then(() => showToast('✓ Copied to clipboard!'));
+}
+
+// ============ KIT NOTIFY ============
+async function notifyKit() {
+  const email = document.getElementById('kitEmail').value.trim();
+  if (!email || !email.includes('@')) { showToast('Please enter a valid email ⚠️', '#ffaa00'); return; }
+  try {
+    const existing = await window.storage.get('kitNotify', true);
+    const list = existing ? JSON.parse(existing.value) : [];
+    if (list.includes(email)) { showToast('Already signed up!', '#00aaff'); return; }
+    list.push(email);
+    await window.storage.set('kitNotify', JSON.stringify(list), true);
+  } catch(e) {}
+  document.getElementById('kitEmail').value = '';
+  showToast('✓ You\'ll be notified when kits are available!');
+}
+
+// ============ TOAST ============
+function showToast(msg, color='var(--green)') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.borderColor = color;
+  t.style.color = color;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ============ LOAD SHARED DATA ============
+async function loadSharedSubmissions() {
+  try {
+    const stored = await window.storage.get('submissions');
+    if (stored) {
+      const extra = JSON.parse(stored.value);
+      const locs = new Set(submissions.map(s=>s.location));
+      extra.forEach(e => { if (!locs.has(e.location)) submissions.push(e); });
+    }
+  } catch(e) {}
+}
+
+// ============ EXPENSE TRACKER ============
+async function loadExpenses() {
+  try {
+    const stored = await window.storage.get('expenseLog');
+    return stored ? JSON.parse(stored.value) : [];
+  } catch(e) { return []; }
+}
+
+async function saveExpenses(expenses) {
+  try {
+    await window.storage.set('expenseLog', JSON.stringify(expenses));
+  } catch(e) {}
+}
+
+async function addExpense() {
+  const password = document.getElementById('exp-password').value;
+  if (password !== ADMIN_PASSWORD) { showToast('Incorrect password ⚠️', '#ff3d5a'); return; }
+  const date = document.getElementById('exp-date').value;
+  const category = document.getElementById('exp-category').value;
+  const amount = parseFloat(document.getElementById('exp-amount').value);
+  const desc = document.getElementById('exp-desc').value.trim();
+  if (!date || !category || !amount || !desc) { showToast('Please fill in all fields ⚠️', '#ffaa00'); return; }
+  const expenses = await loadExpenses();
+  expenses.push({ date, category, amount, desc });
+  await saveExpenses(expenses);
+  ['exp-date','exp-category','exp-amount','exp-desc','exp-password'].forEach(id => { document.getElementById(id).value = ''; });
+  renderExpenseTracker(expenses);
+  showToast('✓ Expense logged!');
+}
+
+async function renderExpenseTracker(expenses) {
+  if (!expenses) expenses = await loadExpenses();
+  let totalRevenue = 0;
+  try {
+    const stored = await window.storage.get('donationLog', true);
+    const log = stored ? JSON.parse(stored.value) : [];
+    totalRevenue = log.reduce((s, e) => s + (e.revenue || 0), 0);
+  } catch(e) {}
+  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+  const netProfit = totalRevenue - totalExpenses;
+  const taxableProfit = Math.max(0, netProfit);
+  document.getElementById('e-total-expenses').textContent = '$' + totalExpenses.toFixed(2);
+  document.getElementById('e-total-revenue').textContent = '$' + totalRevenue.toFixed(2);
+  document.getElementById('e-net-profit').textContent = '$' + netProfit.toFixed(2);
+  document.getElementById('e-tax-status').textContent = '$' + taxableProfit.toFixed(2);
+  const warning = document.getElementById('e-tax-warning');
+  if (warning) warning.style.display = taxableProfit > 400 ? 'block' : 'none';
+  const logEl = document.getElementById('e-expense-log');
+  if (expenses.length === 0) {
+    logEl.innerHTML = '<div style="padding:32px 20px;text-align:center;color:var(--muted)"><div style="font-size:24px;margin-bottom:8px">📋</div><div style="font-size:12px">No expenses logged yet — add your first supply purchase above</div></div>';
+    return;
+  }
+  const catColors = { Supplies:'var(--cyan)', Shipping:'var(--amber)', Packaging:'var(--purple)', 'Etsy Fees':'#ff7a00', Printing:'var(--green)', Equipment:'#00aaff', Other:'var(--muted)' };
+  logEl.innerHTML = [...expenses].reverse().map(e => {
+    const color = catColors[e.category] || 'var(--muted)';
+    const taxDeductible = ['Supplies','Shipping','Packaging','Etsy Fees','Printing','Equipment'].includes(e.category);
+    return '<div style="padding:12px 20px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr 1fr 80px;gap:12px;align-items:center">'
+      + '<div><div style="font-size:12px;color:var(--text)">' + e.desc + '</div><div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);margin-top:2px">' + e.date + '</div></div>'
+      + '<div><span style="font-family:DM Mono,monospace;font-size:10px;color:' + color + ';background:rgba(0,0,0,0.3);border:1px solid ' + color + '44;padding:2px 8px;border-radius:2px">' + e.category + '</span></div>'
+      + '<div style="font-family:DM Mono,monospace;font-size:12px;color:var(--red)">-$' + e.amount.toFixed(2) + '</div>'
+      + '<div style="font-family:DM Mono,monospace;font-size:9px;color:' + (taxDeductible ? 'var(--green)' : 'var(--muted)') + '">' + (taxDeductible ? '✓ Deductible' : '—') + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function exportExpenses() {
+  loadExpenses().then(expenses => {
+    if (expenses.length === 0) { showToast('No expenses to export', '#ffaa00'); return; }
+    const csv = 'Date,Category,Description,Amount\n' + expenses.map(e => e.date + ',' + e.category + ',"' + e.desc + '",' + e.amount.toFixed(2)).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'hydrowatch-expenses.csv'; a.click();
+    URL.revokeObjectURL(url);
+    showToast('✓ Exported as CSV!');
+  });
+}
+
+// ============ TRANSPARENCY ============
+const ADMIN_PASSWORD = 'hydrowatch2026';
+const DONATION_GOAL = 500;
+
+function toggleAdminPanel() {
+  const panel = document.getElementById('admin-panel');
+  const arrow = document.getElementById('admin-arrow');
+  const open = panel.style.display === 'none';
+  panel.style.display = open ? 'block' : 'none';
+  arrow.textContent = open ? '▲' : '▼';
+}
+
+async function loadTransparencyData() {
+  try {
+    const stored = await window.storage.get('donationLog', true);
+    const log = stored ? JSON.parse(stored.value) : [];
+    renderTransparency(log);
+  } catch(e) { renderTransparency([]); }
+  renderExpenseTracker();
+}
+
+function renderTransparency(log) {
+  const totalKits = log.reduce((s, e) => s + (e.kits || 0), 0);
+  const totalRevenue = log.reduce((s, e) => s + (e.revenue || 0), 0);
+  const totalDonated = log.reduce((s, e) => s + (e.donated || 0), 0);
+  const totalKept = totalRevenue - totalDonated;
+  const goalPct = Math.min(100, Math.round((totalDonated / DONATION_GOAL) * 100));
+
+  document.getElementById('t-kits-sold').textContent = totalKits;
+  document.getElementById('t-revenue').textContent = '$' + totalRevenue.toFixed(2);
+  document.getElementById('t-donated').textContent = '$' + totalDonated.toFixed(2);
+  document.getElementById('t-kept').textContent = '$' + totalKept.toFixed(2);
+  document.getElementById('t-goal-pct').textContent = goalPct + '%';
+  setTimeout(() => { document.getElementById('t-goal-bar').style.width = goalPct + '%'; }, 100);
+
+  const logEl = document.getElementById('t-donation-log');
+  if (log.length === 0) {
+    logEl.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--muted)">'
+      + '<div style="font-size:28px;margin-bottom:10px">🌱</div>'
+      + '<div style="font-family:Clash Display,sans-serif;font-size:16px;color:var(--text);margin-bottom:6px">No donations yet</div>'
+      + '<div style="font-size:12px">When kits start selling, every donation will be logged here with a receipt link.</div>'
+      + '</div>';
+    return;
+  }
+
+  logEl.innerHTML = [...log].reverse().map(e => {
+    const receiptLink = e.receipt
+      ? '<a href="' + e.receipt + '" target="_blank" style="font-family:DM Mono,monospace;font-size:10px;color:var(--cyan);text-decoration:none">View Receipt →</a>'
+      : '<span style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted)">Pending</span>';
+    return '<div style="padding:14px 20px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:center">'
+      + '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--text)">' + e.date + '</div>'
+      + '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--text)">' + e.kits + ' kits</div>'
+      + '<div style="font-family:DM Mono,monospace;font-size:11px;color:var(--green)">$' + e.donated.toFixed(2) + '</div>'
+      + '<div>' + receiptLink + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+async function logDonation() {
+  const password = document.getElementById('admin-password').value;
+  if (password !== ADMIN_PASSWORD) { showToast('Incorrect password ⚠️', '#ff3d5a'); return; }
+
+  const date = document.getElementById('admin-date').value;
+  const kits = parseInt(document.getElementById('admin-kits').value);
+  const revenue = parseFloat(document.getElementById('admin-revenue').value);
+  const donated = parseFloat(document.getElementById('admin-donated').value);
+  const receipt = document.getElementById('admin-receipt').value.trim();
+
+  if (!date || !kits || !revenue || !donated) { showToast('Please fill in all fields ⚠️', '#ffaa00'); return; }
+
+  const entry = { date, kits, revenue, donated, receipt };
+
+  try {
+    const stored = await window.storage.get('donationLog', true);
+    const log = stored ? JSON.parse(stored.value) : [];
+    log.push(entry);
+    await window.storage.set('donationLog', JSON.stringify(log), true);
+    renderTransparency(log);
+    // Clear fields
+    ['admin-date','admin-kits','admin-revenue','admin-donated','admin-receipt','admin-password'].forEach(id => { document.getElementById(id).value = ''; });
+    showToast('✓ Donation logged publicly!');
+  } catch(e) { showToast('Error saving ⚠️', '#ff3d5a'); }
+}
+let reviewVotes = {}; // { submissionKey: { up: N, down: N, myVote: null } }
+let reviewFilter = 'all';
+
+function getReviewKey(s) {
+  return s.location + '|' + s.source + '|' + s.count + '|' + s.time;
+}
+
+function getReviewStatus(votes) {
+  if (!votes) return 'pending';
+  if (votes.up >= 3 && votes.up > votes.down * 2) return 'verified';
+  if (votes.down >= 2 && votes.down >= votes.up) return 'flagged';
+  return 'pending';
+}
+
+async function loadReviewVotes() {
+  try {
+    const stored = await window.storage.get('reviewVotes', true);
+    if (stored) reviewVotes = JSON.parse(stored.value);
+  } catch(e) {}
+}
+
+async function saveReviewVotes() {
+  try {
+    await window.storage.set('reviewVotes', JSON.stringify(reviewVotes), true);
+  } catch(e) {}
+}
+
+async function castVote(key, type) {
+  if (!reviewVotes[key]) reviewVotes[key] = { up: 0, down: 0, myVote: null };
+  const v = reviewVotes[key];
+
+  // Toggle off if same vote
+  if (v.myVote === type) {
+    v[type === 'up' ? 'up' : 'down']--;
+    v.myVote = null;
+  } else {
+    // Undo previous vote if switching
+    if (v.myVote === 'up') v.up = Math.max(0, v.up - 1);
+    if (v.myVote === 'down') v.down = Math.max(0, v.down - 1);
+    v[type === 'up' ? 'up' : 'down']++;
+    v.myVote = type;
+  }
+
+  await saveReviewVotes();
+  renderReviewQueue();
+  showToast(type === 'up' ? '✓ Marked as accurate' : '⚠ Flagged for review', type === 'up' ? 'var(--green)' : '#ff7a00');
+}
+
+function filterReview(filter, btn) {
+  reviewFilter = filter;
+  document.querySelectorAll('.review-filter-btn').forEach(b => {
+    b.style.background = 'transparent';
+    b.style.color = 'var(--muted)';
+    b.style.borderColor = 'var(--border)';
+  });
+  btn.style.background = 'var(--surface2)';
+  btn.style.color = 'var(--cyan)';
+  btn.style.borderColor = 'var(--border2)';
+  renderReviewQueue();
+}
+
+function renderReviewQueue() {
+  const container = document.getElementById('reviewQueue');
+  const empty = document.getElementById('reviewEmpty');
+  const countEl = document.getElementById('reviewCount');
+  container.innerHTML = '';
+
+  // Only show submissions that have a photo or notes
+  const reviewable = submissions.filter(s => s.hasPhoto || s.photoNotes);
+
+  const filtered = reviewable.filter(s => {
+    if (reviewFilter === 'all') return true;
+    const key = getReviewKey(s);
+    const status = getReviewStatus(reviewVotes[key]);
+    return status === reviewFilter;
+  });
+
+  countEl.textContent = filtered.length + ' result' + (filtered.length !== 1 ? 's' : '');
+
+  if (filtered.length === 0) {
+    empty.style.display = 'block';
+    // Custom message based on filter
+    if (reviewable.length === 0) {
+      empty.querySelector('div:last-child').textContent = 'Submit a result with a photo in the Submit Data tab to have it appear here for community review.';
+    } else {
+      empty.querySelector('div:last-child').textContent = 'No submissions match this filter.';
+    }
+    return;
+  }
+  empty.style.display = 'none';
+
+  const safetyColors = { minimal:'#00ff88', low:'#00aaff', moderate:'#ffaa00', elevated:'#ff7a00', critical:'#ff3d5a', safe:'#00ff88', mod:'#ffaa00', unsafe:'#ff3d5a' };
+  const safetyLabels = { minimal:'Minimal Risk', low:'Low Risk', moderate:'Moderate Risk', elevated:'Elevated Risk', critical:'Critical Risk', safe:'Minimal Risk', mod:'Moderate Risk', unsafe:'Critical Risk' };
+
+  filtered.forEach(s => {
+    const key = getReviewKey(s);
+    const votes = reviewVotes[key] || { up: 0, down: 0, myVote: null };
+    const status = getReviewStatus(votes);
+    const color = safetyColors[s.safety] || '#888';
+    const label = safetyLabels[s.safety] || s.safety;
+
+    const statusBadge = status === 'verified'
+      ? '<span style="font-family:DM Mono,monospace;font-size:9px;color:var(--green);background:rgba(0,255,136,0.1);border:1px solid rgba(0,255,136,0.25);padding:3px 8px;border-radius:2px;letter-spacing:1px">✓ VERIFIED</span>'
+      : status === 'flagged'
+      ? '<span style="font-family:DM Mono,monospace;font-size:9px;color:#ff7a00;background:rgba(255,122,0,0.1);border:1px solid rgba(255,122,0,0.25);padding:3px 8px;border-radius:2px;letter-spacing:1px">⚠ FLAGGED</span>'
+      : '<span style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);background:var(--surface2);border:1px solid var(--border);padding:3px 8px;border-radius:2px;letter-spacing:1px">PENDING REVIEW</span>';
+
+    const upActive = votes.myVote === 'up' ? 'background:rgba(0,255,136,0.15);border-color:rgba(0,255,136,0.5);color:var(--green)' : 'background:var(--surface2);border-color:var(--border);color:var(--muted)';
+    const downActive = votes.myVote === 'down' ? 'background:rgba(255,122,0,0.15);border-color:rgba(255,122,0,0.5);color:#ff7a00' : 'background:var(--surface2);border-color:var(--border);color:var(--muted)';
+
+    const photoSection = s.hasPhoto
+      ? '<div style="background:rgba(0,200,255,0.04);border:1px dashed rgba(0,200,255,0.2);border-radius:4px;padding:14px;margin-bottom:12px;font-family:DM Mono,monospace;font-size:10px;color:var(--muted);text-align:center">📸 Photo submitted — stored locally on submitter\'s device<br><span style="font-size:9px;opacity:0.7">Community review is based on notes + particle count plausibility</span></div>'
+      : '';
+
+    const notesSection = s.photoNotes
+      ? '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:12px;margin-bottom:12px">'
+        + '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--cyan);letter-spacing:1px;margin-bottom:6px">RESEARCHER NOTES</div>'
+        + '<div style="font-size:12px;color:var(--text);line-height:1.7">' + s.photoNotes + '</div>'
+        + '</div>'
+      : '';
+
+    // Plausibility check
+    const sourceAvg = { 'River / Lake': 58, 'Ocean Water': 34, 'Bottled Water': 18, 'Tap Water': 11, 'Filtered': 3 };
+    const avg = sourceAvg[s.source] || 20;
+    const ratio = s.count / avg;
+    const plausibility = ratio < 0.1 || ratio > 5
+      ? '<div style="font-family:DM Mono,monospace;font-size:9px;color:#ff7a00;background:rgba(255,122,0,0.08);border:1px solid rgba(255,122,0,0.2);border-radius:3px;padding:6px 10px;margin-bottom:12px">⚠ Count is unusually ' + (ratio < 0.1 ? 'low' : 'high') + ' for ' + s.source + ' (avg: ' + avg + ' particles). Review carefully.</div>'
+      : '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--green);background:rgba(0,255,136,0.05);border:1px solid rgba(0,255,136,0.15);border-radius:3px;padding:6px 10px;margin-bottom:12px">✓ Count is within normal range for ' + s.source + ' (avg: ' + avg + ' particles)</div>';
+
+    container.innerHTML += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:hidden">'
+      // Header
+      + '<div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+      + '<div style="flex:1">'
+      + '<div style="font-family:Clash Display,sans-serif;font-size:16px;font-weight:700;color:#fff;margin-bottom:4px">' + s.location + '</div>'
+      + '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted)">' + s.source + ' · ' + s.time + '</div>'
+      + '</div>'
+      + '<span style="font-family:DM Mono,monospace;font-size:11px;color:' + color + ';padding:4px 10px;border:1px solid ' + color + '44;border-radius:3px">' + label + '</span>'
+      + statusBadge
+      + '</div>'
+      // Body
+      + '<div style="padding:20px">'
+      // Stats row
+      + '<div style="display:flex;gap:20px;margin-bottom:16px;flex-wrap:wrap">'
+      + '<div style="text-align:center;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:10px 20px">'
+      + '<div style="font-family:Clash Display,sans-serif;font-size:28px;font-weight:700;color:' + color + '">' + s.count + '</div>'
+      + '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);letter-spacing:1px">PARTICLES</div>'
+      + '</div>'
+      + '<div style="text-align:center;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:10px 20px">'
+      + '<div style="font-family:Clash Display,sans-serif;font-size:28px;font-weight:700;color:var(--text)">' + (s.type || 'Unknown') + '</div>'
+      + '<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--muted);letter-spacing:1px">TYPE</div>'
+      + '</div>'
+      + '</div>'
+      + plausibility
+      + photoSection
+      + notesSection
+      // Vote buttons
+      + '<div style="display:flex;align-items:center;gap:12px;padding-top:16px;border-top:1px solid var(--border)">'
+      + '<div style="font-family:DM Mono,monospace;font-size:10px;color:var(--muted);letter-spacing:0.5px;flex:1">Does this result seem accurate?</div>'
+      + '<button onclick="castVote(\'' + key.replace(/'/g, "\\'") + '\', \'up\')" style="' + upActive + ';border:1px solid;border-radius:3px;padding:8px 16px;font-family:DM Mono,monospace;font-size:11px;cursor:pointer;letter-spacing:0.5px;transition:all 0.2s">✓ Looks Accurate <span style="opacity:0.7">(' + votes.up + ')</span></button>'
+      + '<button onclick="castVote(\'' + key.replace(/'/g, "\\'") + '\', \'down\')" style="' + downActive + ';border:1px solid;border-radius:3px;padding:8px 16px;font-family:DM Mono,monospace;font-size:11px;cursor:pointer;letter-spacing:0.5px;transition:all 0.2s">⚠ Flag <span style="opacity:0.7">(' + votes.down + ')</span></button>'
+      + '</div>'
+      + '</div>'
+      + '</div>';
+  });
+}
+async function init() {
+  await loadSharedSubmissions();
+  await loadReviewVotes();
+  renderSourceChart();
+  renderDonut();
+  renderLeaderboard();
+  renderCleaningRate();
+  renderFeed();
+  rotateFact();
+  setInterval(rotateFact, 6000);
+  updateStats();
+
+function updateStats() {
+  const total = submissions.length;
+  const totalParticles = submissions.reduce((sum, s) => sum + (s.count || 0), 0);
+  const uniqueLocations = new Set(submissions.map(s => s.location)).size;
+  // Extract country from "City, Country" format
+  const countries = new Set(submissions.map(s => {
+    const parts = s.location.split(',');
+    return parts.length > 1 ? parts[parts.length - 1].trim() : s.location;
+  }));
+
+  const targets = {
+    statSubmissions: total,
+    statLocations: uniqueLocations,
+    statParticles: totalParticles,
+    statCountries: countries.size,
+  };
+
+  Object.entries(targets).forEach(([id, target]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    let n = 0;
+    const step = Math.max(1, Math.ceil(target / 40));
+    const iv = setInterval(() => {
+      n = Math.min(n + step, target);
+      el.textContent = n.toLocaleString();
+      if (n >= target) clearInterval(iv);
+    }, 30);
+  });
+
+  const impactEl = document.getElementById('impactCount');
+  if (impactEl) impactEl.textContent = total.toLocaleString();
+}
+}
+
+init();
+</script>
+</body>
+</html>
